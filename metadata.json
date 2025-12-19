@@ -1,0 +1,7 @@
+{
+  "name": "Vilaça Joias Studio",
+  "description": "Estúdio profissional de fotografia de joias. Transforme suas fotos em imagens de catálogo com remoção de fundo e iluminação otimizada, em um só clique. ",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
