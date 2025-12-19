@@ -9,7 +9,7 @@ export const enhanceJewelryImage = async (base64Image: string): Promise<string> 
   const model = 'gemini-2.5-flash-image';
   
   const prompt = `
-    This is a professional macro photograph for Vilaça Joias. 
+    This is a professional macro photograph for a jewelry catalog. 
     Task: 
     1. EXTREME PRECISION: Remove the background completely, preserving every detail of the jewelry's edges, even fine chains or thin prongs.
     2. BACKGROUND: Place the jewelry on a perfectly solid, pure studio white background (#FFFFFF).
@@ -19,9 +19,10 @@ export const enhanceJewelryImage = async (base64Image: string): Promise<string> 
        - Polish the metal surfaces (gold, silver) to remove any blur or camera noise, creating high-end studio reflections.
        - Ensure the focal point is razor-sharp.
     5. SHADOWS: Add a very soft, subtle "contact shadow" underneath the jewelry so it doesn't look like it's floating unnaturally.
-    6. STYLE: Match the ultra-sharp, high-contrast luxury look of the world's finest jewelry catalogs (like Vivara).
+    6. STYLE: Match the ultra-sharp, high-contrast luxury look of the world's finest jewelry catalogs.
+    7. NO WATERMARKS: Do NOT include any text, logos, branding, watermarks, or signatures on the image. The final result must be clean and ready for commercial use.
     
-    Return ONLY the final processed image.
+    Return ONLY the final processed image without any overlays or text.
   `;
 
   const response = await ai.models.generateContent({
