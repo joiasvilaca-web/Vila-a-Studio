@@ -1,57 +1,99 @@
 
 import { GoogleGenAI } from "@google/genai";
 
-// A chave API é obtida exclusivamente do ambiente, sem necessidade de input do usuário.
-const API_KEY = process.env.API_KEY || '';
+export interface EnhancedJewelryResponse {
+  imageUrl: string;
+  category: 'RING' | 'EARRING' | 'NECKLACE' | 'BRACELET' | 'PENDANT';
+  material: 'YELLOW_GOLD' | 'WHITE_GOLD' | 'SILVER' | 'ROSE_GOLD';
+}
 
-export const enhanceJewelryImage = async (base64Image: string): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: API_KEY });
-  
-  // Modelo otimizado para edição rápida e precisa de imagens
-  const model = 'gemini-2.5-flash-image';
+export const enhanceJewelryImage = async (base64Image: string): Promise<EnhancedJewelryResponse> => {
+  // Inicialização usando a chave do ambiente
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const modelName = 'gemini-2.5-flash-image'; 
   
   const prompt = `
-    TASK: Professional high-end jewelry retouching.
-    1. BACKGROUND: Remove the original background completely. Replace it with a PURE, SOLID WHITE background (#FFFFFF).
-    2. CLEANLINESS: Do NOT add any watermarks, text, logos, signatures, or borders. The image must be 100% clean.
-    3. JEWELRY ENHANCEMENT:
-       - Enhance the metallic luster (Gold/Silver/Platinum) to a mirror-like finish.
-       - Increase the brilliance and fire of all gemstones (Diamonds, etc.).
-       - Ensure all edges are perfectly sharp and aliasing-free.
-    4. NATURAL SHADOW: Place a very subtle, soft contact shadow at the base of the item to ensure it looks grounded on the white surface.
-    5. COMPOSITION: Center the item and fill the frame appropriately for a professional catalog.
-    
-    OUTPUT: Return ONLY the processed image.
+    AJA COMO UM RETOCADOR MASTER DE JOALHERIA (PADRÃO VIVARA EDITORIAL).
+    INSTRUÇÕES DE IMAGEM:
+    1. FUNDO: Remova perfeitamente o fundo original e substitua por Branco Puro (#FFFFFF).
+    2. REFLEXO: Adicione uma sombra de contato muito fina sob a joia e um reflexo espelhado vertical sutil (opacidade 15%).
+    3. QUALIDADE: Melhore a nitidez e o brilho do metal (ouro/prata) e pedras preciosas.
+    4. METADADOS: Identifique a categoria e o material.
+    SAÍDA DE TEXTO NO FINAL: [META: CATEGORIA, MATERIAL]
+    Categorias: RING, EARRING, NECKLACE, BRACELET, PENDANT.
+    Materiais: YELLOW_GOLD, WHITE_GOLD, SILVER, ROSE_GOLD.
   `;
 
   try {
     const response = await ai.models.generateContent({
-      model,
+      model: modelName,
       contents: {
         parts: [
-          {
-            inlineData: {
-              mimeType: 'image/png',
-              data: base64Image.split(',')[1] || base64Image,
-            },
-          },
-          {
-            text: prompt,
-          },
-        ],
-      },
+          { inlineData: { mimeType: 'image/png', data: base64Image.split(',')[1] || base64Image } },
+          { text: prompt }
+        ]
+      }
     });
+
+    let imageUrl = '';
+    let category: any = 'RING';
+    let material: any = 'YELLOW_GOLD';
 
     if (response.candidates?.[0]?.content?.parts) {
       for (const part of response.candidates[0].content.parts) {
         if (part.inlineData) {
-          return `data:image/png;base64,${part.inlineData.data}`;
+          imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        } else if (part.text) {
+          const metadataMatch = part.text.match(/\[META:\s*(\w+),\s*(\w+)\]/i);
+          if (metadataMatch) {
+            category = metadataMatch[1].toUpperCase();
+            material = metadataMatch[2].toUpperCase();
+          }
         }
       }
     }
-    throw new Error("O processamento não retornou uma imagem válida.");
-  } catch (error) {
+
+    if (!imageUrl) {
+        throw new Error("Não foi possível processar a imagem. Tente novamente com melhor iluminação.");
+    }
+
+    return { imageUrl, category, material };
+  } catch (error: any) {
     console.error("Erro no Gemini Service:", error);
-    throw new Error("Falha ao processar imagem. Verifique a conexão ou a iluminação da foto.");
+    throw error;
+  }
+};
+
+export const generateModelView = async (base64Jewelry: string, category: string, material: string): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const modelName = 'gemini-2.5-flash-image';
+
+  const prompt = `
+    FOTOGRAFIA ULTRA-REALISTA DE ALTA MODA.
+    Uma pessoa real (modelo) usando esta joia (${category}) de ${material}.
+    - Integrar a joia ao corpo/pele com sombras naturais.
+    - Estilo Editorial de Joalheria. Fundo neutro e elegante.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: {
+        parts: [
+          { inlineData: { mimeType: 'image/png', data: base64Jewelry.split(',')[1] || base64Jewelry } },
+          { text: prompt }
+        ]
+      }
+    });
+
+    if (response.candidates?.[0]?.content?.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+      }
+    }
+    throw new Error("Falha na geração da modelo.");
+  } catch (error) {
+    console.error(error);
+    throw error;
   }
 };
