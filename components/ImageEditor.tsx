@@ -13,11 +13,12 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
     contrast: 100,
     saturate: 100,
     warmth: 0,
-    mirror: 20
+    mirror: 10
   });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const bufferCanvasRef = useRef<HTMLCanvasElement>(null);
+  const sourceCanvasRef = useRef<HTMLCanvasElement>(null); 
+  const filterBufferRef = useRef<HTMLCanvasElement>(null); 
   const imageRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
@@ -26,60 +27,105 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
     img.src = imageUrl;
     img.onload = () => {
       imageRef.current = img;
+      
+      const sCanvas = sourceCanvasRef.current;
+      if (sCanvas) {
+        sCanvas.width = img.width;
+        sCanvas.height = img.height;
+        const sCtx = sCanvas.getContext('2d', { willReadFrequently: true });
+        sCtx?.drawImage(img, 0, 0);
+      }
+      
       applyFilters();
     };
   }, [imageUrl]);
 
   const applyFilters = () => {
-    const canvas = canvasRef.current;
-    const buffer = bufferCanvasRef.current;
+    const mainCanvas = canvasRef.current;
+    const sCanvas = sourceCanvasRef.current;
+    const bCanvas = filterBufferRef.current;
     const img = imageRef.current;
-    if (!canvas || !buffer || !img) return;
+    
+    if (!mainCanvas || !sCanvas || !bCanvas || !img) return;
 
-    const ctx = canvas.getContext('2d');
-    const bctx = buffer.getContext('2d');
-    if (!ctx || !bctx) return;
+    const ctx = mainCanvas.getContext('2d');
+    const bCtx = bCanvas.getContext('2d', { willReadFrequently: true });
+    const sCtx = sCanvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx || !bCtx || !sCtx) return;
 
-    canvas.width = buffer.width = img.width;
-    canvas.height = buffer.height = img.height + (img.height * (filters.mirror / 100));
+    const w = img.width;
+    const h = img.height;
+    const totalHeight = h + (h * (filters.mirror / 100));
 
-    bctx.clearRect(0, 0, buffer.width, buffer.height);
-    bctx.filter = `brightness(${filters.brightness}%) contrast(${filters.contrast}%) saturate(${filters.saturate}%) sepia(${filters.warmth}%)`;
-    bctx.drawImage(img, 0, 0, img.width, img.height);
+    mainCanvas.width = bCanvas.width = w;
+    mainCanvas.height = bCanvas.height = totalHeight;
 
+    // 1. FUNDO BLINDADO: Preenchemos o canvas principal com Branco Puro imutável
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(buffer, 0, 0, img.width, img.height);
+    ctx.fillRect(0, 0, w, totalHeight);
 
-    // Reflexo Espelhado
+    // 2. BUFFER DE AJUSTE: Aplicamos os filtros de brilho/contraste no buffer temporário
+    bCtx.clearRect(0, 0, w, totalHeight);
+    bCtx.filter = `brightness(${filters.brightness}%) contrast(${filters.contrast}%) saturate(${filters.saturate}%) sepia(${filters.warmth}%)`;
+    bCtx.drawImage(img, 0, 0, w, h);
+    bCtx.filter = 'none';
+
+    // 3. TRANSFERÊNCIA SELETIVA (MÁSCARA CIRÚRGICA)
+    // Analisamos o original para saber exatamente onde está o objeto (pixels não-brancos)
+    const sourceData = sCtx.getImageData(0, 0, w, h);
+    const filterData = bCtx.getImageData(0, 0, w, h);
+    const finalData = ctx.getImageData(0, 0, w, h);
+
+    const sPixels = sourceData.data;
+    const fPixels = filterData.data;
+    const outPixels = finalData.data;
+
+    // Um pixel é considerado fundo se for muito próximo do branco puro
+    const bgThreshold = 250; 
+
+    for (let i = 0; i < sPixels.length; i += 4) {
+      const r = sPixels[i];
+      const g = sPixels[i+1];
+      const b = sPixels[i+2];
+
+      // Se o pixel original NÃO for fundo branco, ele é objeto e recebe o ajuste
+      if (r < bgThreshold || g < bgThreshold || b < bgThreshold) {
+        outPixels[i] = fPixels[i];
+        outPixels[i+1] = fPixels[i+1];
+        outPixels[i+2] = fPixels[i+2];
+        outPixels[i+3] = 255;
+      } else {
+        // Se for fundo, mantemos o branco puro preenchido no passo 1
+        // Não alteramos outPixels[i...i+3] pois o fillRect já cuidou disso
+      }
+    }
+    ctx.putImageData(finalData, 0, 0);
+
+    // 4. REFLEXO DE ESTÚDIO (Opcional)
     if (filters.mirror > 0) {
       ctx.save();
-      ctx.translate(0, img.height * 2);
+      const mirrorH = h * (filters.mirror / 100);
+      ctx.translate(0, h * 2);
       ctx.scale(1, -1);
-      const grad = ctx.createLinearGradient(0, img.height, 0, img.height + (img.height * (filters.mirror / 100)));
-      grad.addColorStop(0, `rgba(255, 255, 255, ${1 - (filters.mirror / 150)})`);
-      grad.addColorStop(1, 'rgba(255, 255, 255, 1)');
-      ctx.globalAlpha = filters.mirror / 200;
-      ctx.drawImage(buffer, 0, img.height, img.width, img.height);
+      ctx.globalAlpha = 0.08; 
+      
+      // Desenha o objeto já filtrado no reflexo, respeitando a máscara
+      ctx.drawImage(bCanvas, 0, h, w, h);
+      
+      // Fade-out do reflexo
       ctx.globalCompositeOperation = 'destination-out';
+      const grad = ctx.createLinearGradient(0, h, 0, h + mirrorH);
+      grad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+      grad.addColorStop(1, 'rgba(255, 255, 255, 1)');
       ctx.fillStyle = grad;
-      ctx.fillRect(0, img.height, canvas.width, img.height);
+      ctx.fillRect(0, h, w, h);
       ctx.restore();
     }
-
-    // Marca d'água Vilaça no canto inferior direito
-    ctx.save();
-    ctx.globalAlpha = 0.4;
-    ctx.fillStyle = "#662344";
-    ctx.font = `bold ${canvas.width * 0.025}px 'Playfair Display'`;
-    ctx.textAlign = "right";
-    ctx.fillText("VILAÇA STUDIO", canvas.width - 20, canvas.height - 20);
-    ctx.restore();
   };
 
   useEffect(() => {
-    const timeout = setTimeout(applyFilters, 50);
-    return () => clearTimeout(timeout);
+    const timer = setTimeout(applyFilters, 40);
+    return () => clearTimeout(timer);
   }, [filters]);
 
   const handleSave = () => {
@@ -89,31 +135,57 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
   };
 
   return (
-    <div className="fixed inset-0 z-[70] bg-[#0d0d0d] flex flex-col md:flex-row overflow-hidden animate-in fade-in duration-500">
-      <div className="flex-grow relative flex items-center justify-center p-6 overflow-y-auto">
-        <button onClick={onCancel} className="absolute top-8 left-8 p-4 bg-white/5 rounded-full text-white/50">
+    <div className="fixed inset-0 z-[70] bg-[#020202] flex flex-col md:flex-row overflow-hidden animate-in fade-in duration-500">
+      <div className="flex-grow relative flex items-center justify-center p-4 md:p-16 overflow-y-auto">
+        <button onClick={onCancel} className="absolute top-8 left-8 p-4 bg-white/5 rounded-full text-white/40 hover:text-white transition-colors z-10 backdrop-blur-md">
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
-        <div className="bg-white p-4 rounded-xl shadow-2xl">
-          <canvas ref={canvasRef} className="max-w-full max-h-[70vh] object-contain" />
+        
+        <div className="bg-white p-1 rounded-2xl shadow-[0_60px_120px_rgba(0,0,0,0.9)] max-w-full">
+          <canvas ref={canvasRef} className="max-w-full max-h-[75vh] object-contain rounded-xl" />
         </div>
       </div>
 
-      <div className="w-full md:w-96 bg-[#141414] border-l border-white/5 p-8 flex flex-col">
-        <h3 className="text-[#fdd49e] font-serif text-2xl mb-8">Retoque Vivara</h3>
-        <div className="space-y-6 flex-grow">
-          <div className="space-y-3">
-            <label className="text-[9px] uppercase tracking-widest text-white/40">Brilho do Ouro</label>
-            <input type="range" min="50" max="150" value={filters.brightness} onChange={e => setFilters(f => ({...f, brightness: +e.target.value}))} className="w-full accent-[#fdd49e]" />
+      <div className="w-full md:w-96 bg-[#080808] border-l border-white/5 p-10 flex flex-col shadow-2xl">
+        <div className="mb-12 text-center">
+          <h3 className="text-[#fdd49e] font-serif text-3xl uppercase tracking-tighter italic">Photo Treatment</h3>
+          <p className="text-[10px] text-white/30 uppercase tracking-[0.4em] font-black mt-3">Fidelidade Vilaça Joias</p>
+        </div>
+        
+        <div className="space-y-12 flex-grow">
+          <div className="space-y-5">
+            <div className="flex justify-between items-end">
+               <label className="text-[11px] uppercase tracking-widest text-white/40 font-bold">Luz do Objeto</label>
+               <span className="text-[10px] text-[#fdd49e] font-mono">{filters.brightness}%</span>
+            </div>
+            <input type="range" min="60" max="160" value={filters.brightness} onChange={e => setFilters(f => ({...f, brightness: +e.target.value}))} className="w-full accent-[#fdd49e]" />
           </div>
-          <div className="space-y-3">
-            <label className="text-[9px] uppercase tracking-widest text-white/40">Intensidade do Reflexo</label>
-            <input type="range" min="0" max="60" value={filters.mirror} onChange={e => setFilters(f => ({...f, mirror: +e.target.value}))} className="w-full accent-[#fdd49e]" />
+          
+          <div className="space-y-5">
+            <div className="flex justify-between items-end">
+               <label className="text-[11px] uppercase tracking-widest text-white/40 font-bold">Definição Metal</label>
+               <span className="text-[10px] text-[#fdd49e] font-mono">{filters.contrast}%</span>
+            </div>
+            <input type="range" min="80" max="140" value={filters.contrast} onChange={e => setFilters(f => ({...f, contrast: +e.target.value}))} className="w-full accent-[#fdd49e]" />
+          </div>
+
+          <div className="space-y-5">
+            <div className="flex justify-between items-end">
+               <label className="text-[11px] uppercase tracking-widest text-white/40 font-bold">Reflexo de Base</label>
+               <span className="text-[10px] text-[#fdd49e] font-mono">{filters.mirror}%</span>
+            </div>
+            <input type="range" min="0" max="30" value={filters.mirror} onChange={e => setFilters(f => ({...f, mirror: +e.target.value}))} className="w-full accent-[#fdd49e]" />
           </div>
         </div>
-        <button onClick={handleSave} className="w-full bg-[#fdd49e] text-[#662344] py-5 font-black uppercase tracking-widest rounded-2xl shadow-xl mt-12">Confirmar</button>
+        
+        <div className="pt-10 border-t border-white/5">
+           <button onClick={handleSave} className="w-full bg-[#fdd49e] text-[#662344] py-6 font-black uppercase tracking-[0.2em] rounded-2xl hover:brightness-110 transition-all shadow-xl active:scale-95 mb-4">Finalizar Tratamento</button>
+           <p className="text-[9px] text-white/20 text-center uppercase tracking-widest leading-relaxed">Nota: O fundo branco (#FFFFFF) permanece inalterado para preservação do catálogo.</p>
+        </div>
       </div>
-      <canvas ref={bufferCanvasRef} className="hidden" />
+      
+      <canvas ref={sourceCanvasRef} className="hidden" />
+      <canvas ref={filterBufferRef} className="hidden" />
     </div>
   );
 };

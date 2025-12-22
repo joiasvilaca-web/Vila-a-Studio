@@ -1,6 +1,6 @@
 {
-  "name": "Vilaça Joias Studio",
-  "description": "Estúdio profissional de fotografia de joias com Realidade Aumentada para prova virtual.",
+  "name": "VILAÇA ESTÚDIO",
+  "description": "Estúdio profissional de fotografia de joias.",
   "requestFramePermissions": [
     "camera"
   ]

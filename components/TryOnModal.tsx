@@ -26,7 +26,7 @@ const TryOnModal: React.FC<TryOnModalProps> = ({ isOpen, onClose, image, categor
     setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
   };
 
-  // Processamento de transparência com preservação de brilhos
+  // Processamento de transparência da joia
   useEffect(() => {
     if (!image) return;
     const img = new Image();
@@ -43,12 +43,10 @@ const TryOnModal: React.FC<TryOnModalProps> = ({ isOpen, onClose, image, categor
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
       
-      // Torna transparente apenas o branco puro do fundo gerado pela IA
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
         const g = data[i+1];
         const b = data[i+2];
-        // Threshold alto (253-255) para não apagar o brilho da peça (que geralmente é < 250)
         if (r > 252 && g > 252 && b > 252) {
           data[i+3] = 0;
         }
@@ -77,14 +75,11 @@ const TryOnModal: React.FC<TryOnModalProps> = ({ isOpen, onClose, image, categor
       if (isInitializing) setIsInitializing(false);
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
 
       let found = false;
       let pos = { x: 0, y: 0, angle: 0, width: 0 };
       let occluderPoints: any[] = [];
 
-      // SELECIONA O MOTOR DE ANCORAGEM CORRETO
       const useHandTracker = (category === 'RING' || category === 'BRACELET');
 
       if (useHandTracker && results.multiHandLandmarks?.length > 0) {
@@ -92,19 +87,15 @@ const TryOnModal: React.FC<TryOnModalProps> = ({ isOpen, onClose, image, categor
         found = true;
         
         if (category === 'RING') {
-          // Ancoragem no dedo anelar (Pontos 13 e 14)
           const mcp = hand[13]; 
           const pip = hand[14]; 
           pos.x = ((mcp.x + pip.x) / 2) * canvas.width;
           pos.y = ((mcp.y + pip.y) / 2) * canvas.height;
-          
           const rawAngle = Math.atan2(pip.y - mcp.y, pip.x - mcp.x) + Math.PI / 2;
           pos.angle = facingMode === 'user' ? -rawAngle : rawAngle;
-          
           const dist = Math.sqrt(Math.pow(pip.x - mcp.x, 2) + Math.pow(pip.y - mcp.y, 2));
           pos.width = dist * canvas.width * 1.5;
         } else {
-          // Pulseira no pulso (Ponto 0)
           const wrist = hand[0];
           pos.x = wrist.x * canvas.width;
           pos.y = wrist.y * canvas.height;
@@ -115,17 +106,14 @@ const TryOnModal: React.FC<TryOnModalProps> = ({ isOpen, onClose, image, categor
         found = true;
         
         if (category === 'EARRING') {
-          // Escolhe o lóbulo da orelha mais visível
           const leftLobe = face[454];
           const rightLobe = face[234];
           const useRight = Math.abs(rightLobe.x - face[1].x) > Math.abs(leftLobe.x - face[1].x);
           const lobe = useRight ? rightLobe : leftLobe;
-          
           pos.x = lobe.x * canvas.width;
           pos.y = lobe.y * canvas.height;
           pos.width = Math.abs(face[33].x - face[263].x) * canvas.width * 0.35;
         } else {
-          // Colar ou Pingente abaixo do queixo
           const chin = face[152];
           const nose = face[1];
           const headHeight = Math.sqrt(Math.pow(nose.x - chin.x, 2) + Math.pow(nose.y - chin.y, 2));
@@ -142,15 +130,12 @@ const TryOnModal: React.FC<TryOnModalProps> = ({ isOpen, onClose, image, categor
         ctx.save();
         ctx.translate(pos.x, pos.y);
         ctx.rotate(pos.angle);
-        
         const aspect = processedJewelry.height / processedJewelry.width;
         const drawWidth = pos.width;
         const drawHeight = pos.width * aspect;
-        
         ctx.drawImage(processedJewelry, -drawWidth/2, -drawHeight/2, drawWidth, drawHeight);
         ctx.restore();
 
-        // Oclusão simples para não sobrepor o rosto/mão onde não deve
         if (occluderPoints.length > 0) {
           ctx.save();
           ctx.beginPath();
@@ -194,9 +179,10 @@ const TryOnModal: React.FC<TryOnModalProps> = ({ isOpen, onClose, image, categor
         facingMode: facingMode
       });
       
-      cameraInstance.start().catch(() => setIsInitializing(false));
+      cameraInstance.start();
 
     } catch (e) {
+      console.error("Erro AR:", e);
       setIsInitializing(false);
     }
 
@@ -212,10 +198,7 @@ const TryOnModal: React.FC<TryOnModalProps> = ({ isOpen, onClose, image, categor
   return (
     <div className="fixed inset-0 z-[100] bg-black flex flex-col overflow-hidden select-none">
       <div className="absolute top-0 inset-x-0 p-6 flex justify-between items-center z-50">
-        <button 
-          onClick={onClose} 
-          className="p-4 bg-black/40 backdrop-blur-2xl rounded-full text-white border border-white/20 active:scale-90 transition-transform shadow-2xl"
-        >
+        <button onClick={onClose} className="p-4 bg-black/40 backdrop-blur-2xl rounded-full text-white border border-white/20 active:scale-90 transition-transform shadow-2xl">
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -228,17 +211,9 @@ const TryOnModal: React.FC<TryOnModalProps> = ({ isOpen, onClose, image, categor
           </span>
         </div>
         
-        <button 
-          onClick={toggleCamera} 
-          className="p-4 bg-black/40 backdrop-blur-2xl rounded-full text-white border border-white/20 active:scale-90 transition-transform shadow-2xl"
-        >
+        <button onClick={toggleCamera} className="p-4 bg-black/40 backdrop-blur-2xl rounded-full text-white border border-white/20 active:scale-90 transition-transform shadow-2xl">
           <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 4h-3.17L15 2H9L7.17 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
-            <path d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/>
-            <path d="M12 19a7 7 0 0 0 7-7"/>
-            <path d="M5 12a7 7 0 0 0 7 7"/>
-            <polyline points="16 19 19 19 19 16"/>
-            <polyline points="8 5 5 5 5 8"/>
+            <path d="M20 4h-3.17L15 2H9L7.17 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><circle cx="12" cy="13" r="3"/><path d="M12 19a7 7 0 0 0 7-7"/><path d="M5 12a7 7 0 0 0 7 7"/>
           </svg>
         </button>
       </div>
@@ -249,10 +224,7 @@ const TryOnModal: React.FC<TryOnModalProps> = ({ isOpen, onClose, image, categor
         <div className="relative w-full h-full overflow-hidden flex items-center justify-center">
            <canvas 
              ref={canvasOverlayRef} 
-             style={{ 
-               transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
-               imageRendering: 'crisp-edges'
-             }}
+             style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
              className="absolute inset-0 w-full h-full object-cover z-20 pointer-events-none"
            />
            
@@ -270,7 +242,7 @@ const TryOnModal: React.FC<TryOnModalProps> = ({ isOpen, onClose, image, categor
           <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md">
             <div className="flex flex-col items-center gap-6">
               <div className="w-12 h-12 border-[3px] border-[#fdd49e] border-t-transparent rounded-full animate-spin"></div>
-              <div className="text-white text-[10px] uppercase font-bold tracking-[0.5em] opacity-60">Smart Lens Ativa</div>
+              <div className="text-white text-[10px] uppercase font-bold tracking-[0.5em] opacity-60 text-center">Calibrando Sensores...<br/>Aguarde.</div>
             </div>
           </div>
         )}
