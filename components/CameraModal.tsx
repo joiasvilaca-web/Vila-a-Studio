@@ -13,25 +13,16 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCapture })
   const streamRef = useRef<MediaStream | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [zoom, setZoom] = useState(1);
-  const [torch, setTorch] = useState(true); 
+  const [torch, setTorch] = useState(false);
   const [capabilities, setCapabilities] = useState<any>(null);
-  const [isCapturing, setIsCapturing] = useState(false);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => {
-        // Importante: Desligar explicitamente a lanterna antes de parar o track
-        try {
-          if ((track as any).applyConstraints) {
-            (track as any).applyConstraints({ advanced: [{ torch: false }] }).catch(() => {});
-          }
-        } catch(e) {}
-        track.stop();
-      });
+      streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
     setCameraActive(false);
-    setCapabilities(null);
+    setTorch(false);
   }, []);
 
   const startCamera = useCallback(async () => {
@@ -39,10 +30,9 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCapture })
     try {
       const constraints: MediaStreamConstraints = {
         video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 2560 },
-          height: { ideal: 1440 },
-          frameRate: { max: 30 }
+          facingMode: { ideal: "environment" },
+          width: { ideal: 3840 },
+          height: { ideal: 2160 }
         }
       };
 
@@ -61,29 +51,41 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCapture })
               const caps = track.getCapabilities() as any;
               setCapabilities(caps);
               
-              const adv: any = {};
-              if (caps.focusMode?.includes('continuous')) adv.focusMode = 'continuous';
+              const advanced: any = {};
+              if (caps.focusMode?.includes('continuous')) advanced.focusMode = 'continuous';
+              if (caps.whiteBalanceMode?.includes('continuous')) advanced.whiteBalanceMode = 'continuous';
               if (caps.zoom) setZoom(caps.zoom.min);
-              if (caps.torch !== undefined) {
-                adv.torch = true;
-                setTorch(true);
-              }
               
-              if (Object.keys(adv).length > 0) {
-                await track.applyConstraints({ advanced: [adv] }).catch(() => {});
+              if (Object.keys(advanced).length > 0) {
+                track.applyConstraints({ advanced: [advanced] }).catch(e => console.warn("Constraints falharam", e));
               }
             }
           } catch (e) {
-            console.warn("Erro ao iniciar hardware da câmera", e);
+            console.error(e);
           }
         };
       }
     } catch (err) {
       console.error(err);
-      alert("Permissão de câmera negada ou erro de hardware.");
+      alert("Erro ao acessar câmera traseira.");
       onClose();
     }
   }, [onClose, stopCamera]);
+
+  const toggleTorch = async () => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (track && capabilities?.torch) {
+      try {
+        const nextTorch = !torch;
+        await track.applyConstraints({
+          advanced: [{ torch: nextTorch }]
+        } as any);
+        setTorch(nextTorch);
+      } catch (e) {
+        console.warn("Lanterna não suportada", e);
+      }
+    }
+  };
 
   useEffect(() => {
     if (isOpen) startCamera();
@@ -91,71 +93,63 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCapture })
     return () => stopCamera();
   }, [isOpen, startCamera, stopCamera]);
 
-  useEffect(() => {
-    const apply = async () => {
-      const track = streamRef.current?.getVideoTracks()[0];
-      if (track && capabilities) {
-        const adv: any = {};
-        if (capabilities.zoom) adv.zoom = zoom;
-        if (capabilities.torch !== undefined) adv.torch = torch;
-        if (Object.keys(adv).length > 0) {
-          await track.applyConstraints({ advanced: [adv] }).catch(() => {});
-        }
-      }
-    };
-    apply();
-  }, [zoom, torch, capabilities]);
-
-  const capturePhoto = async () => {
-    if (isCapturing || !cameraActive || !videoRef.current || !canvasRef.current) return;
-    setIsCapturing(true);
-    
+  const capturePhoto = () => {
+    if (!videoRef.current || !canvasRef.current || !cameraActive) return;
     const canvas = canvasRef.current;
     const video = videoRef.current;
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-    
     const ctx = canvas.getContext('2d', { alpha: false });
     if (ctx) {
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(video, 0, 0);
-      onCapture(canvas.toDataURL('image/png', 0.95));
+      onCapture(canvas.toDataURL('image/jpeg', 0.98));
     }
-    setIsCapturing(false);
   };
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[150] bg-black flex flex-col animate-in fade-in duration-300">
-      <div className="p-6 flex justify-between items-center text-white z-20 absolute top-0 inset-x-0 bg-gradient-to-b from-black/80 to-transparent">
-        <button onClick={onClose} className="p-4 bg-white/10 backdrop-blur-md rounded-full active:scale-90 border border-white/5">
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+      <div className="p-6 flex justify-between items-center text-white absolute top-0 inset-x-0 z-20 bg-gradient-to-b from-black/80 to-transparent">
+        <button onClick={onClose} className="p-4 bg-white/10 backdrop-blur-2xl rounded-full border border-white/10">
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeWidth={2.5}/></svg>
         </button>
-        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#fdd49e]">Precision Focus</span>
-        {capabilities?.torch !== undefined ? (
-          <button onClick={() => setTorch(!torch)} className={`p-4 rounded-full border transition-all ${torch ? 'bg-[#fdd49e] text-[#662344] border-[#fdd49e]' : 'bg-white/10 border-white/5'}`}>
-            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M7,2V5H17V2H7M7,6V7H17V6H7M7,8V21A2,2 0 0,0 9,23H15A2,2 0 0,0 17,21V8H7M12,14A2,2 0 1,1 10,16A2,2 0 0,1 12,14Z" />
+        <div className="flex flex-col items-center">
+          <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#fdd49e]">Macro Studio</span>
+          <span className="text-[7px] text-white/50 uppercase tracking-[0.2em]">Foco Vivara Nítido</span>
+        </div>
+        {capabilities?.torch ? (
+          <button 
+            onClick={toggleTorch}
+            className={`p-4 rounded-full border transition-all ${torch ? 'bg-[#fdd49e] text-[#662344]' : 'bg-white/10 border-white/10'}`}
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
             </svg>
           </button>
         ) : <div className="w-14"></div>}
       </div>
       
-      <div className="flex-grow relative flex items-center justify-center overflow-hidden">
-        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-        <div className="absolute inset-0 border-[1.5rem] border-black/20 pointer-events-none"></div>
-        
+      <video ref={videoRef} autoPlay playsInline muted className="flex-grow object-cover" />
+
+      <div className="h-48 bg-black flex flex-col items-center justify-center gap-6">
         {capabilities?.zoom && (
-          <div className="absolute bottom-12 left-1/2 -translate-x-1/2 w-56 flex flex-col items-center gap-3 px-8 py-5 bg-black/60 backdrop-blur-xl rounded-[2.5rem] border border-white/10 shadow-2xl">
-            <input type="range" min={capabilities.zoom.min} max={capabilities.zoom.max} step="0.1" value={zoom} onChange={(e) => setZoom(parseFloat(e.target.value))} className="w-full accent-[#fdd49e]" />
-            <span className="text-[9px] text-[#fdd49e] font-black uppercase tracking-[0.3em]">{zoom.toFixed(1)}x MACRO</span>
+          <div className="w-64 flex flex-col items-center gap-2">
+            <input type="range" min={capabilities.zoom.min} max={capabilities.zoom.max} step="0.1" value={zoom} onChange={async (e) => {
+              const v = parseFloat(e.target.value);
+              setZoom(v);
+              streamRef.current?.getVideoTracks()[0].applyConstraints({ advanced: [{ zoom: v }] as any });
+            }} className="w-full accent-[#fdd49e]" />
+            <span className="text-[9px] text-[#fdd49e] font-bold uppercase tracking-widest">{zoom.toFixed(1)}x</span>
           </div>
         )}
-      </div>
-
-      <div className="h-44 bg-black flex items-center justify-center">
-        <button onClick={capturePhoto} disabled={!cameraActive || isCapturing} className="w-24 h-24 rounded-full border-[8px] border-white/10 flex items-center justify-center active:scale-95 transition-all">
-          <div className="w-18 h-18 rounded-full bg-[#fdd49e] shadow-[0_0_20px_rgba(253,212,158,0.4)]"></div>
+        <button 
+          onClick={capturePhoto} 
+          className="w-24 h-24 rounded-full border-[6px] border-white/20 p-2 active:scale-95 transition-all flex items-center justify-center"
+        >
+          <div className="w-full h-full rounded-full bg-[#fdd49e] shadow-[0_0_50px_rgba(253,212,158,0.4)]"></div>
         </button>
       </div>
       <canvas ref={canvasRef} className="hidden" />

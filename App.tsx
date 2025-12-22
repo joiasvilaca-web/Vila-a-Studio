@@ -4,8 +4,14 @@ import Layout from './components/Layout';
 import CameraModal from './components/CameraModal';
 import ImageEditor from './components/ImageEditor';
 import ModelViewModal from './components/ModelViewModal';
-import { enhanceJewelryImage, generateModelView, generateJewelryVideo } from './services/geminiService';
-import { ProcessingState } from './types';
+import { 
+  enhanceJewelryImage, 
+  generateImagePro, 
+  editImageWithAI, 
+  animateWithVeo,
+  generateModelView
+} from './services/geminiService';
+import { ProcessingState, ImageSize, AspectRatio } from './types';
 
 interface AppImageState {
   original: string;
@@ -18,285 +24,249 @@ interface AppImageState {
 }
 
 const App: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'home' | 'create'>('home');
   const [image, setImage] = useState<AppImageState | null>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isModelViewOpen, setIsModelViewOpen] = useState(false);
-  const [selectedFullScreenImage, setSelectedFullScreenImage] = useState<string | null>(null);
   const [processing, setProcessing] = useState<ProcessingState>({ status: 'idle' });
   
-  const [pendingBase64, setPendingBase64] = useState<string | null>(null);
-  const [showObservationDialog, setShowObservationDialog] = useState(false);
-  const [userObservation, setUserObservation] = useState('');
-
-  const disclaimerLines = [
-    "IMAGENS GERADAS/TRATADAS POR I.A.",
-    "PODEM CONTER DISTORÇÕES",
-    "CONSULTE DETALHES COM A ATENDENTE"
-  ];
+  // States para Criação Pro
+  const [proPrompt, setProPrompt] = useState('');
+  const [proSize, setProSize] = useState<ImageSize>('1K');
+  
+  // States para Edição AI
+  const [aiEditPrompt, setAiEditPrompt] = useState('');
+  const [showEditDialog, setShowEditDialog] = useState(false);
 
   const ensureApiKey = async () => {
-    try {
-      const aistudio = (window as any).aistudio;
-      if (aistudio) {
-        if (!(await aistudio.hasSelectedApiKey())) {
-          await aistudio.openSelectKey();
-        }
-      }
-    } catch (e) {
-      console.warn("AISTUDIO helper not found", e);
-    }
+    const aistudio = (window as any).aistudio;
+    if (aistudio && !(await aistudio.hasSelectedApiKey())) await aistudio.openSelectKey();
   };
 
-  const addDisclaimerToImage = (base64: string): Promise<string> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) { resolve(base64); return; }
-
-        ctx.drawImage(img, 0, 0);
-        
-        const fontSize = Math.floor(canvas.width * 0.025); 
-        ctx.font = `bold ${fontSize}px 'Inter', sans-serif`;
-        
-        const lineHeight = fontSize * 1.4;
-        const padding = fontSize * 2;
-        const barHeight = (lineHeight * disclaimerLines.length) + padding;
-        
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-        ctx.fillRect(0, canvas.height - barHeight, canvas.width, barHeight);
-        
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#FFFFFF';
-        
-        const totalTextHeight = (disclaimerLines.length - 1) * lineHeight;
-        const startY = canvas.height - (barHeight / 2) - (totalTextHeight / 2);
-        
-        disclaimerLines.forEach((line, i) => {
-          ctx.fillText(line, canvas.width / 2, startY + (i * lineHeight));
-        });
-        
-        resolve(canvas.toDataURL('image/jpeg', 0.9));
-      };
-      img.onerror = () => resolve(base64);
-      img.src = base64;
-    });
-  };
-
-  const handleDownload = (url: string, filename: string) => {
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleShare = async (url: string, title: string) => {
-    try {
-      if (url.startsWith('blob:')) {
-        handleDownload(url, `${title}.mp4`);
-        return;
-      }
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const ext = blob.type.split('/')[1] || 'jpg';
-      const file = new File([blob], `${title}.${ext}`, { type: blob.type });
-      
-      if (navigator.share) {
-        await navigator.share({
-          files: [file],
-          title: 'Vilaça Joias Studio',
-          text: 'Confira esta criação do Vilaça Studio!'
-        });
-      } else {
-        handleDownload(url, `${title}.${ext}`);
-      }
-    } catch (e) {
-      console.error("Erro ao compartilhar:", e);
-      handleDownload(url, `${title}.jpg`);
-    }
-  };
-
-  const processImage = async (base64: string, observation?: string) => {
-    setShowObservationDialog(false);
+  const handleCreatePro = async () => {
+    if (!proPrompt) return;
     await ensureApiKey();
-    
-    setProcessing({ status: 'loading', message: 'Iniciando Laboratório Vilaça...' });
-    setImage({ original: base64 });
-    
+    setProcessing({ status: 'loading', message: `Gerando Joia Pro ${proSize}...` });
     try {
-      setProcessing({ status: 'loading', message: 'Tratando joia para catálogo...' });
-      const treatedResult = await enhanceJewelryImage(base64, observation);
-      const treatedWithText = await addDisclaimerToImage(treatedResult.imageUrl);
+      const url = await generateImagePro(proPrompt, proSize);
+      setImage({ original: url, edited: url, treated: url });
+      setProcessing({ status: 'success' });
+    } catch (e: any) {
+      setProcessing({ status: 'error', message: e.message || "Erro na geração Pro" });
+    }
+  };
 
-      setProcessing({ status: 'loading', message: 'Ambientando em modelo editorial...' });
-      const modelUrl = await generateModelView(treatedResult.imageUrl, treatedResult.category, treatedResult.material);
-      const modelWithText = await addDisclaimerToImage(modelUrl);
+  const handleAIEdit = async () => {
+    if (!aiEditPrompt || !image?.edited) return;
+    setShowEditDialog(false);
+    setProcessing({ status: 'loading', message: 'I.A. Refinando a peça...' });
+    try {
+      const newUrl = await editImageWithAI(image.edited, aiEditPrompt);
+      setImage(p => p ? { ...p, edited: newUrl } : null);
+      setProcessing({ status: 'success' });
+      setAiEditPrompt('');
+    } catch (e: any) {
+      setProcessing({ status: 'error', message: e.message || "Erro na edição I.A." });
+    }
+  };
 
-      setProcessing({ status: 'loading', message: 'Gerando vídeo cinematográfico...' });
-      const videoUrl = await generateJewelryVideo(treatedResult.imageUrl, treatedResult.category, treatedResult.material);
+  const handleAnimate = async (ratio: AspectRatio, useModel: boolean = false) => {
+    const sourceImage = useModel ? image?.model : image?.edited;
+    if (!sourceImage) return;
+    
+    await ensureApiKey();
+    setProcessing({ status: 'loading', message: 'Veo 3.1 Animando...' });
+    try {
+      const videoUrl = await animateWithVeo(sourceImage, useModel ? "Fashion editorial showcase" : "Floating cinematic showcase", ratio);
+      setImage(p => p ? { ...p, video: videoUrl } : null);
+      setProcessing({ status: 'success' });
+    } catch (e: any) {
+      setProcessing({ status: 'error', message: e.message || "Erro na animação" });
+    }
+  };
+
+  const processImageFile = async (base64: string) => {
+    setIsCameraOpen(false);
+    await ensureApiKey();
+    setProcessing({ status: 'loading', message: 'Processando I.A. Vilaça...' });
+    try {
+      const result = await enhanceJewelryImage(base64);
+      
+      // Gera a foto da modelo automaticamente para ter um asset editorial
+      setProcessing({ status: 'loading', message: 'Criando Visual Editorial...' });
+      const modelUrl = await generateModelView(result.imageUrl, result.category, result.material);
 
       setImage({ 
         original: base64, 
-        treated: treatedWithText,
-        model: modelWithText,
-        video: videoUrl,
-        edited: treatedWithText,
-        category: treatedResult.category,
-        material: treatedResult.material
+        treated: result.imageUrl, 
+        edited: result.imageUrl,
+        model: modelUrl,
+        category: result.category,
+        material: result.material
       });
       setProcessing({ status: 'success' });
-    } catch (error: any) {
-      console.error(error);
-      setProcessing({ status: 'error', message: error.message || 'Falha técnica. Tente uma foto mais nítida.' });
+    } catch (e: any) {
+      setProcessing({ status: 'error', message: e.message || "Erro no processamento" });
     }
   };
 
-  const reset = useCallback(() => {
-    setImage(null);
-    setProcessing({ status: 'idle' });
-    setPendingBase64(null);
-    setUserObservation('');
-  }, []);
-
   return (
     <Layout>
-      {processing.status === 'idle' ? (
-        <div className="max-w-2xl mx-auto mt-12 md:mt-20 text-center animate-in fade-in slide-in-from-bottom-4 duration-1000">
-          <div className="mb-12">
-            <h1 className="text-[#662344] font-serif text-4xl md:text-5xl mb-4 italic">Vilaça Studio</h1>
-            <p className="text-[#662344]/50 text-[10px] tracking-[0.4em] uppercase font-black">Digital Jewelry Excellence</p>
+      {/* NAVEGAÇÃO SUPERIOR */}
+      <div className="flex justify-center mb-10">
+        <div className="inline-flex bg-zinc-200/50 p-1 rounded-full backdrop-blur-md">
+          <button 
+            onClick={() => setActiveTab('home')}
+            className={`px-8 py-3 rounded-full text-[10px] font-black uppercase tracking-[0.3em] transition-all ${activeTab === 'home' ? 'bg-[#662344] text-[#fdd49e] shadow-lg' : 'text-[#662344]/50 hover:text-[#662344]'}`}
+          >
+            Captura e Retoque
+          </button>
+          <button 
+            onClick={() => setActiveTab('create')}
+            className={`px-8 py-3 rounded-full text-[10px] font-black uppercase tracking-[0.3em] transition-all ${activeTab === 'create' ? 'bg-[#662344] text-[#fdd49e] shadow-lg' : 'text-[#662344]/50 hover:text-[#662344]'}`}
+          >
+            Criação Digital Pro
+          </button>
+        </div>
+      </div>
+
+      {processing.status === 'loading' ? (
+        <div className="min-h-[60vh] flex flex-col items-center justify-center animate-in fade-in zoom-in duration-500">
+          <div className="relative w-40 h-40 mb-12">
+            <div className="absolute inset-0 border-[6px] border-[#fdd49e]/10 rounded-full"></div>
+            <div className="absolute inset-0 border-t-[6px] border-[#662344] rounded-full animate-spin"></div>
+            <div className="absolute inset-4 border-[2px] border-dashed border-[#662344]/20 rounded-full animate-pulse"></div>
           </div>
-
-          <div className="grid gap-6 md:grid-cols-2">
-            <button onClick={() => setIsCameraOpen(true)} className="flex flex-col items-center justify-center p-12 border border-[#fdd49e]/30 bg-white hover:border-[#fdd49e] hover:shadow-xl transition-all rounded-[3rem] group">
-              <div className="w-16 h-16 mb-6 text-[#662344] group-hover:scale-110 transition-transform">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-              </div>
-              <span className="text-[10px] uppercase tracking-[0.3em] font-black text-[#662344]">Captura Pro</span>
+          <p className="text-[12px] uppercase tracking-[0.5em] font-black text-[#662344]">{processing.message}</p>
+        </div>
+      ) : activeTab === 'home' && !image ? (
+        <div className="max-w-3xl mx-auto text-center py-20 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+          <h1 className="text-6xl md:text-8xl font-serif text-[#662344] italic mb-6">Vilaça Studio</h1>
+          <p className="text-[11px] uppercase tracking-[0.5em] text-[#662344]/40 font-black mb-16">Fotografia para Joalheria</p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+            <button onClick={() => setIsCameraOpen(true)} className="p-16 bg-white border border-[#fdd49e]/30 rounded-[5rem] shadow-xl hover:shadow-2xl hover:scale-[1.02] transition-all group">
+              <div className="w-20 h-20 mx-auto mb-8 text-[#662344] group-hover:scale-110 transition-transform"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" strokeWidth={1}/><circle cx="12" cy="13" r="3" strokeWidth={1}/></svg></div>
+              <span className="text-[12px] font-black uppercase tracking-[0.4em] text-[#662344]">Tirar Foto</span>
             </button>
-
-            <label className="flex flex-col items-center justify-center p-12 border border-[#fdd49e]/30 bg-white hover:border-[#fdd49e] hover:shadow-xl transition-all rounded-[3rem] cursor-pointer group">
-              <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+            <label className="p-16 bg-white border border-[#fdd49e]/30 rounded-[5rem] shadow-xl hover:shadow-2xl hover:scale-[1.02] transition-all cursor-pointer group">
+              <input type="file" className="hidden" accept="image/*" onChange={e => {
                 const file = e.target.files?.[0];
                 if (file) {
                   const reader = new FileReader();
-                  reader.onload = (ev) => {
-                    setPendingBase64(ev.target?.result as string);
-                    setShowObservationDialog(true);
-                  };
+                  reader.onload = ev => processImageFile(ev.target?.result as string);
                   reader.readAsDataURL(file);
                 }
               }} />
-              <div className="w-16 h-16 mb-6 text-[#662344] group-hover:scale-110 transition-transform">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-              </div>
-              <span className="text-[10px] uppercase tracking-[0.3em] font-black text-[#662344]">Importar Foto</span>
+              <div className="w-20 h-20 mx-auto mb-8 text-[#662344] group-hover:scale-110 transition-transform"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" strokeWidth={1}/></svg></div>
+              <span className="text-[12px] font-black uppercase tracking-[0.4em] text-[#662344]">Arquivo</span>
             </label>
           </div>
         </div>
+      ) : activeTab === 'create' && !image ? (
+        <div className="max-w-2xl mx-auto bg-white p-16 rounded-[6rem] shadow-2xl border border-[#fdd49e]/20 animate-in fade-in zoom-in duration-700">
+          <h2 className="text-4xl font-serif text-[#662344] italic text-center mb-10">Gerador de Luxo</h2>
+          <textarea 
+            className="w-full h-44 p-10 bg-zinc-50 border border-zinc-100 rounded-[4rem] text-lg outline-none mb-10 resize-none focus:ring-2 focus:ring-[#fdd49e]/40 transition-all text-[#662344]"
+            placeholder="Descreva a joia dos sonhos... Ex: Colar de pérolas negras com fecho de diamante em platina."
+            value={proPrompt}
+            onChange={e => setProPrompt(e.target.value)}
+          />
+          
+          <div className="flex flex-col items-center mb-12">
+            <span className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold mb-5">Resolução de Imagem</span>
+            <div className="flex gap-4">
+              {(['1K', '2K', '4K'] as ImageSize[]).map(s => (
+                <button 
+                  key={s} 
+                  onClick={() => setProSize(s)}
+                  className={`px-8 py-3 rounded-full text-[11px] font-black tracking-widest transition-all ${proSize === s ? 'bg-[#662344] text-[#fdd49e] shadow-lg' : 'bg-zinc-100 text-[#662344]/30 hover:bg-zinc-200'}`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          <button onClick={handleCreatePro} className="w-full bg-[#662344] text-[#fdd49e] py-7 rounded-[3rem] text-[12px] uppercase tracking-[0.5em] font-black shadow-2xl hover:brightness-110 active:scale-95 transition-all">Gerar Obra-Prima Digital</button>
+        </div>
       ) : (
-        <div className="animate-in fade-in duration-700">
-          {processing.status === 'loading' ? (
-            <div className="min-h-[65vh] flex flex-col items-center justify-center bg-white border border-[#fdd49e]/10 rounded-[4rem] shadow-sm p-12">
-              <div className="relative w-24 h-24 mb-10">
-                <div className="absolute inset-0 border-4 border-[#fdd49e]/20 rounded-full"></div>
-                <div className="absolute inset-0 border-t-4 border-[#662344] rounded-full animate-spin"></div>
+        <div className="animate-in fade-in duration-1000 space-y-16">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 max-w-7xl mx-auto">
+            {/* ITEM 1: CATÁLOGO */}
+            <div className="space-y-8">
+              <div className="flex justify-between items-center px-6">
+                <span className="text-[12px] font-black uppercase tracking-[0.3em] text-[#662344]">Catálogo White</span>
+                <div className="flex gap-4">
+                  <button onClick={() => setShowEditDialog(true)} className="px-6 py-3 bg-[#fdd49e] text-[#662344] rounded-full text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all">Edição I.A.</button>
+                  <button onClick={() => setIsEditorOpen(true)} className="px-6 py-3 border border-[#fdd49e] text-[#662344] rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-[#fdd49e]/10 transition-all">Ajustes</button>
+                </div>
               </div>
-              <h2 className="text-2xl font-serif text-[#662344] mb-4 italic">Estúdio Vilaça</h2>
-              <p className="text-[10px] uppercase tracking-[0.4em] text-[#662344]/40 font-black animate-pulse">{processing.message}</p>
+              <div className="aspect-square bg-white rounded-[5rem] shadow-2xl overflow-hidden border border-[#fdd49e]/10 group">
+                <img src={image?.edited} className="w-full h-full object-contain p-14 group-hover:scale-[1.05] transition-transform duration-1000" alt="Joia" />
+              </div>
+              <div className="flex gap-4">
+                  <button onClick={() => handleAnimate('9:16', false)} className="flex-grow py-4 bg-[#662344]/5 text-[#662344] rounded-2xl text-[10px] font-black uppercase tracking-widest">Vídeo Produto (9:16)</button>
+              </div>
             </div>
-          ) : (
-            <div className="space-y-12">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {/* 1. CATÁLOGO */}
-                <div className="space-y-4 group">
-                  <div className="flex justify-between items-center px-4">
-                    <span className="text-[10px] uppercase tracking-[0.2em] text-[#662344] font-black italic">Catálogo Macro</span>
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handleDownload(image?.edited!, 'Vilaca_Catalogo.jpg')} className="p-2 bg-[#fdd49e] text-[#662344] rounded-full shadow-sm"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" strokeWidth={2.5}/></svg></button>
-                      <button onClick={() => handleShare(image?.edited!, 'Joia Catalogo')} className="p-2 bg-[#fdd49e] text-[#662344] rounded-full shadow-sm"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" strokeWidth={2.5}/></svg></button>
-                    </div>
-                  </div>
-                  <div className="aspect-square bg-white border border-[#fdd49e]/20 rounded-[2.5rem] overflow-hidden shadow-xl cursor-pointer" onClick={() => { setSelectedFullScreenImage(image?.edited!); setIsModelViewOpen(true); }}>
-                    <img src={image?.edited} className="w-full h-full object-contain p-4 hover:scale-105 transition-transform duration-700" alt="Catálogo" />
-                  </div>
-                </div>
 
-                {/* 2. CAMPANHA */}
-                <div className="space-y-4 group">
-                  <div className="flex justify-between items-center px-4">
-                    <span className="text-[10px] uppercase tracking-[0.2em] text-[#662344] font-black italic">Editorial</span>
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handleDownload(image?.model!, 'Vilaca_Campanha.jpg')} className="p-2 bg-[#fdd49e] text-[#662344] rounded-full shadow-sm"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" strokeWidth={2.5}/></svg></button>
-                      <button onClick={() => handleShare(image?.model!, 'Joia Campanha')} className="p-2 bg-[#fdd49e] text-[#662344] rounded-full shadow-sm"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" strokeWidth={2.5}/></svg></button>
-                    </div>
-                  </div>
-                  <div className="aspect-square bg-zinc-100 border border-[#fdd49e]/20 rounded-[2.5rem] overflow-hidden shadow-xl cursor-pointer" onClick={() => { setSelectedFullScreenImage(image?.model!); setIsModelViewOpen(true); }}>
-                    <img src={image?.model} className="w-full h-full object-cover hover:scale-105 transition-transform duration-700" alt="Campanha" />
-                  </div>
-                </div>
-
-                {/* 3. VÍDEO CINEMATOGRÁFICO */}
-                <div className="space-y-4 group">
-                  <div className="flex justify-between items-center px-4">
-                    <span className="text-[10px] uppercase tracking-[0.2em] text-[#662344] font-black italic">Vídeo Cinematic</span>
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handleShare(image?.video!, 'Vilaca_Cinematic')} className="p-2 bg-[#fdd49e] text-[#662344] rounded-full shadow-sm"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" strokeWidth={2.5}/></svg></button>
-                    </div>
-                  </div>
-                  <div className="aspect-square bg-black border border-[#fdd49e]/20 rounded-[2.5rem] overflow-hidden shadow-xl">
-                    <video src={image?.video} className="w-full h-full object-cover" autoPlay loop muted playsInline />
-                  </div>
-                </div>
+            {/* ITEM 2: EDITORIAL (MODELO) */}
+            <div className="space-y-8">
+              <div className="flex justify-between items-center px-6">
+                <span className="text-[12px] font-black uppercase tracking-[0.3em] text-[#662344]">Editorial Moda</span>
+                <span className="text-[10px] text-zinc-400 uppercase">Visual de Campanha</span>
               </div>
+              <div className="aspect-square bg-zinc-100 rounded-[5rem] shadow-2xl overflow-hidden border border-[#fdd49e]/10 group">
+                <img src={image?.model} className="w-full h-full object-cover group-hover:scale-[1.05] transition-transform duration-1000" alt="Modelo" />
+              </div>
+              <div className="flex gap-4">
+                  <button onClick={() => handleAnimate('9:16', true)} className="flex-grow py-4 bg-[#662344] text-[#fdd49e] rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl">Animar Editorial (Veo)</button>
+              </div>
+            </div>
+          </div>
 
-              <div className="flex flex-col items-center gap-6 pt-10 border-t border-[#fdd49e]/10">
-                <button onClick={reset} className="px-16 py-5 bg-[#662344] text-[#fdd49e] rounded-2xl text-[11px] uppercase tracking-[0.4em] font-black shadow-2xl active:scale-95 transition-all">Novo Projeto</button>
-                <p className="text-[9px] text-[#662344]/30 uppercase tracking-widest font-bold">Vilaça Studio I.A. Protocol 3.1</p>
+          {image?.video && (
+            <div className="max-w-4xl mx-auto space-y-8">
+              <h3 className="text-2xl font-serif text-[#662344] text-center italic">Showcase Cinematográfico</h3>
+              <div className="aspect-video bg-black rounded-[3rem] overflow-hidden shadow-2xl ring-4 ring-[#fdd49e]/20">
+                <video src={image.video} controls autoPlay loop className="w-full h-full object-cover" />
               </div>
             </div>
           )}
 
-          {processing.status === 'error' && (
-            <div className="mt-8 p-12 bg-red-50 border border-red-100 rounded-[3rem] text-center">
-              <p className="text-red-700 font-black uppercase text-[10px] tracking-widest mb-6">{processing.message}</p>
-              <button onClick={reset} className="bg-red-600 text-white px-10 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest">Tentar Novamente</button>
-            </div>
-          )}
+          <div className="flex justify-center pb-10">
+            <button 
+              onClick={() => { setImage(null); setActiveTab('home'); setProcessing({ status: 'idle' }); }}
+              className="px-20 py-7 bg-white border-2 border-[#662344] text-[#662344] rounded-[2.5rem] text-[12px] font-black uppercase tracking-[0.4em] hover:bg-[#662344] hover:text-[#fdd49e] transition-all"
+            >
+              Reiniciar Estúdio
+            </button>
+          </div>
         </div>
       )}
 
-      {showObservationDialog && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/90 backdrop-blur-xl">
-          <div className="w-full max-w-md bg-white rounded-[4rem] p-10 shadow-2xl border border-[#fdd49e]/20">
-            <div className="text-center mb-8">
-              <h2 className="text-[#662344] font-serif text-3xl italic">Retoque Vilaça</h2>
-              <p className="text-[9px] uppercase tracking-[0.3em] text-[#662344]/40 font-black mt-2">Personalize o Tratamento</p>
-            </div>
+      {/* DIÁLOGO DE EDIÇÃO I.A. (NANO BANANA) */}
+      {showEditDialog && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/95 backdrop-blur-3xl animate-in fade-in duration-300">
+          <div className="w-full max-w-xl bg-white rounded-[5rem] p-16 shadow-2xl">
+            <h2 className="text-4xl font-serif text-[#662344] italic text-center mb-10">Laboratório I.A.</h2>
             <textarea 
-              className="w-full h-32 p-6 border border-zinc-100 rounded-[2rem] bg-zinc-50 text-sm outline-none mb-8 resize-none shadow-inner focus:ring-1 focus:ring-[#fdd49e]/50 transition-all" 
-              placeholder="Ex: Realçar brilho dos rubis, ouro amarelo 18k polido..." 
-              value={userObservation} 
-              onChange={(e) => setUserObservation(e.target.value)} 
+              className="w-full h-40 p-10 bg-zinc-50 border border-zinc-100 rounded-[3rem] text-lg outline-none mb-10 resize-none focus:ring-2 focus:ring-[#fdd49e]/40 transition-all text-[#662344]"
+              placeholder="Ex: 'Adicione um brilho azulado na pedra central', 'Troque o fundo para uma textura de seda preta'..."
+              value={aiEditPrompt}
+              onChange={e => setAiEditPrompt(e.target.value)}
             />
-            <div className="grid gap-3">
-              <button onClick={() => processImage(pendingBase64!, userObservation)} className="w-full bg-[#662344] text-[#fdd49e] py-5 rounded-2xl text-[10px] uppercase tracking-[0.3em] font-black shadow-lg">Gerar Conteúdo I.A.</button>
-              <button onClick={() => setShowObservationDialog(false)} className="w-full text-zinc-400 py-3 text-[10px] uppercase font-bold tracking-widest">Cancelar</button>
+            <div className="grid gap-4">
+              <button onClick={handleAIEdit} className="w-full bg-[#662344] text-[#fdd49e] py-7 rounded-[2.5rem] text-[11px] font-black uppercase tracking-[0.4em] shadow-2xl hover:brightness-110 active:scale-95">Executar Edição Inteligente</button>
+              <button onClick={() => setShowEditDialog(false)} className="w-full py-4 text-zinc-400 text-[11px] font-black uppercase tracking-widest">Cancelar</button>
             </div>
           </div>
         </div>
       )}
 
-      <CameraModal isOpen={isCameraOpen} onClose={() => setIsCameraOpen(false)} onCapture={(base64) => { setIsCameraOpen(false); setPendingBase64(base64); setShowObservationDialog(true); }} />
-      {isEditorOpen && image?.treated && <ImageEditor imageUrl={image.treated} onSave={(url) => { setImage(p => p ? {...p, edited: url} : null); setIsEditorOpen(false); }} onCancel={() => setIsEditorOpen(false)} />}
-      {isModelViewOpen && selectedFullScreenImage && <ModelViewModal isOpen={isModelViewOpen} onClose={() => { setIsModelViewOpen(false); setSelectedFullScreenImage(null); }} modelImageUrl={selectedFullScreenImage} category={image?.category || ''} />}
+      <CameraModal isOpen={isCameraOpen} onClose={() => setIsCameraOpen(false)} onCapture={processImageFile} />
+      {isEditorOpen && image?.edited && <ImageEditor imageUrl={image.edited} onSave={(url) => { setImage(p => p ? {...p, edited: url} : null); setIsEditorOpen(false); }} onCancel={() => setIsEditorOpen(false)} />}
     </Layout>
   );
 };
