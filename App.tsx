@@ -78,7 +78,7 @@ const App: React.FC = () => {
     await ensureApiKey();
     setProcessing({ status: 'loading', message: 'Veo 3.1 Animando...' });
     try {
-      const videoUrl = await animateWithVeo(sourceImage, useModel ? "Fashion editorial showcase" : "Floating cinematic showcase", ratio);
+      const videoUrl = await animateWithVeo(sourceImage, useModel ? "Fashion editorial cinematic animation" : "Product showcase slow motion", ratio);
       setImage(p => p ? { ...p, video: videoUrl } : null);
       setProcessing({ status: 'success' });
     } catch (e: any) {
@@ -93,7 +93,6 @@ const App: React.FC = () => {
     try {
       const result = await enhanceJewelryImage(base64);
       
-      // Gera a foto da modelo automaticamente para ter um asset editorial
       setProcessing({ status: 'loading', message: 'Criando Visual Editorial...' });
       const modelUrl = await generateModelView(result.imageUrl, result.category, result.material);
 
@@ -147,7 +146,9 @@ const App: React.FC = () => {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
             <button onClick={() => setIsCameraOpen(true)} className="p-16 bg-white border border-[#fdd49e]/30 rounded-[5rem] shadow-xl hover:shadow-2xl hover:scale-[1.02] transition-all group">
-              <div className="w-20 h-20 mx-auto mb-8 text-[#662344] group-hover:scale-110 transition-transform"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" strokeWidth={1}/><circle cx="12" cy="13" r="3" strokeWidth={1}/></svg></div>
+              <div className="w-20 h-20 mx-auto mb-8 text-[#662344] group-hover:scale-110 transition-transform">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" strokeWidth={1.5}/><circle cx="12" cy="13" r="3" strokeWidth={1.5}/></svg>
+              </div>
               <span className="text-[12px] font-black uppercase tracking-[0.4em] text-[#662344]">Tirar Foto</span>
             </button>
             <label className="p-16 bg-white border border-[#fdd49e]/30 rounded-[5rem] shadow-xl hover:shadow-2xl hover:scale-[1.02] transition-all cursor-pointer group">
@@ -159,7 +160,9 @@ const App: React.FC = () => {
                   reader.readAsDataURL(file);
                 }
               }} />
-              <div className="w-20 h-20 mx-auto mb-8 text-[#662344] group-hover:scale-110 transition-transform"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" strokeWidth={1}/></svg></div>
+              <div className="w-20 h-20 mx-auto mb-8 text-[#662344] group-hover:scale-110 transition-transform">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" strokeWidth={1.5}/></svg>
+              </div>
               <span className="text-[12px] font-black uppercase tracking-[0.4em] text-[#662344]">Arquivo</span>
             </label>
           </div>
@@ -169,7 +172,7 @@ const App: React.FC = () => {
           <h2 className="text-4xl font-serif text-[#662344] italic text-center mb-10">Gerador de Luxo</h2>
           <textarea 
             className="w-full h-44 p-10 bg-zinc-50 border border-zinc-100 rounded-[4rem] text-lg outline-none mb-10 resize-none focus:ring-2 focus:ring-[#fdd49e]/40 transition-all text-[#662344]"
-            placeholder="Descreva a joia dos sonhos... Ex: Colar de pérolas negras com fecho de diamante em platina."
+            placeholder="Descreva a joia... Ex: Anel de esmeralda colombiana lapidação gota em ouro 18k."
             value={proPrompt}
             onChange={e => setProPrompt(e.target.value)}
           />
@@ -203,11 +206,11 @@ const App: React.FC = () => {
                   <button onClick={() => setIsEditorOpen(true)} className="px-6 py-3 border border-[#fdd49e] text-[#662344] rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-[#fdd49e]/10 transition-all">Ajustes</button>
                 </div>
               </div>
-              <div className="aspect-square bg-white rounded-[5rem] shadow-2xl overflow-hidden border border-[#fdd49e]/10 group">
+              <div className="aspect-square bg-white rounded-[5rem] shadow-2xl overflow-hidden border border-[#fdd49e]/10 group relative">
                 <img src={image?.edited} className="w-full h-full object-contain p-14 group-hover:scale-[1.05] transition-transform duration-1000" alt="Joia" />
               </div>
               <div className="flex gap-4">
-                  <button onClick={() => handleAnimate('9:16', false)} className="flex-grow py-4 bg-[#662344]/5 text-[#662344] rounded-2xl text-[10px] font-black uppercase tracking-widest">Vídeo Produto (9:16)</button>
+                  <button onClick={() => handleAnimate('9:16', false)} className="flex-grow py-4 bg-[#662344]/5 text-[#662344] rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-[#662344]/10 transition-colors">Vídeo Produto (9:16)</button>
               </div>
             </div>
 
@@ -217,17 +220,17 @@ const App: React.FC = () => {
                 <span className="text-[12px] font-black uppercase tracking-[0.3em] text-[#662344]">Editorial Moda</span>
                 <span className="text-[10px] text-zinc-400 uppercase">Visual de Campanha</span>
               </div>
-              <div className="aspect-square bg-zinc-100 rounded-[5rem] shadow-2xl overflow-hidden border border-[#fdd49e]/10 group">
+              <div className="aspect-square bg-zinc-100 rounded-[5rem] shadow-2xl overflow-hidden border border-[#fdd49e]/10 group relative">
                 <img src={image?.model} className="w-full h-full object-cover group-hover:scale-[1.05] transition-transform duration-1000" alt="Modelo" />
               </div>
               <div className="flex gap-4">
-                  <button onClick={() => handleAnimate('9:16', true)} className="flex-grow py-4 bg-[#662344] text-[#fdd49e] rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl">Animar Editorial (Veo)</button>
+                  <button onClick={() => handleAnimate('9:16', true)} className="flex-grow py-4 bg-[#662344] text-[#fdd49e] rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl hover:brightness-110 active:scale-95 transition-all">Animar Editorial (Veo)</button>
               </div>
             </div>
           </div>
 
           {image?.video && (
-            <div className="max-w-4xl mx-auto space-y-8">
+            <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-bottom-12 duration-1000">
               <h3 className="text-2xl font-serif text-[#662344] text-center italic">Showcase Cinematográfico</h3>
               <div className="aspect-video bg-black rounded-[3rem] overflow-hidden shadow-2xl ring-4 ring-[#fdd49e]/20">
                 <video src={image.video} controls autoPlay loop className="w-full h-full object-cover" />
@@ -235,7 +238,7 @@ const App: React.FC = () => {
             </div>
           )}
 
-          <div className="flex justify-center pb-10">
+          <div className="flex justify-center pb-20">
             <button 
               onClick={() => { setImage(null); setActiveTab('home'); setProcessing({ status: 'idle' }); }}
               className="px-20 py-7 bg-white border-2 border-[#662344] text-[#662344] rounded-[2.5rem] text-[12px] font-black uppercase tracking-[0.4em] hover:bg-[#662344] hover:text-[#fdd49e] transition-all"
@@ -253,12 +256,12 @@ const App: React.FC = () => {
             <h2 className="text-4xl font-serif text-[#662344] italic text-center mb-10">Laboratório I.A.</h2>
             <textarea 
               className="w-full h-40 p-10 bg-zinc-50 border border-zinc-100 rounded-[3rem] text-lg outline-none mb-10 resize-none focus:ring-2 focus:ring-[#fdd49e]/40 transition-all text-[#662344]"
-              placeholder="Ex: 'Adicione um brilho azulado na pedra central', 'Troque o fundo para uma textura de seda preta'..."
+              placeholder="Ex: 'Remova o fundo e coloque textura de mármore', 'Realce o brilho dos diamantes', 'Mude para Ouro Rose'..."
               value={aiEditPrompt}
               onChange={e => setAiEditPrompt(e.target.value)}
             />
             <div className="grid gap-4">
-              <button onClick={handleAIEdit} className="w-full bg-[#662344] text-[#fdd49e] py-7 rounded-[2.5rem] text-[11px] font-black uppercase tracking-[0.4em] shadow-2xl hover:brightness-110 active:scale-95">Executar Edição Inteligente</button>
+              <button onClick={handleAIEdit} className="w-full bg-[#662344] text-[#fdd49e] py-7 rounded-[2.5rem] text-[11px] font-black uppercase tracking-[0.4em] shadow-2xl hover:brightness-110 active:scale-95 transition-all">Executar Edição Inteligente</button>
               <button onClick={() => setShowEditDialog(false)} className="w-full py-4 text-zinc-400 text-[11px] font-black uppercase tracking-widest">Cancelar</button>
             </div>
           </div>

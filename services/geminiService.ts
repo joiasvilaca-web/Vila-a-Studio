@@ -19,7 +19,8 @@ const getMimeType = (base64: string): string => {
 };
 
 /**
- * ANÁLISE DE METADADOS (FLASH LITE - RESPOSTA ULTRA RÁPIDA)
+ * ANÁLISE DE METADADOS (FLASH LITE - FAST AI)
+ * Resposta ultra-rápida para identificação de contexto.
  */
 export const analyzeJewelryFast = async (base64Image: string): Promise<{category: string, material: string}> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -31,7 +32,7 @@ export const analyzeJewelryFast = async (base64Image: string): Promise<{category
     contents: {
       parts: [
         { inlineData: { mimeType, data: pureData } },
-        { text: "Analise esta joia. Identifique a CATEGORIA (ANEL, BRINCO, COLO, PULSEIRA) e o MATERIAL (OURO AMARELO, OURO BRANCO, PRATA, OURO ROSE)." }
+        { text: "Analise esta joia. Identifique CATEGORIA (ANEL, BRINCO, COLO, PULSEIRA) e MATERIAL (OURO AMARELO, OURO BRANCO, PRATA, OURO ROSE)." }
       ]
     },
     config: {
@@ -52,6 +53,7 @@ export const analyzeJewelryFast = async (base64Image: string): Promise<{category
 
 /**
  * GERAÇÃO DE VISTA EDITORIAL (MODELO USANDO A JOIA)
+ * Usa Gemini 3 Pro Image para alta qualidade.
  */
 export const generateModelView = async (base64Jewelry: string, category: string, material: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -80,7 +82,7 @@ export const generateModelView = async (base64Jewelry: string, category: string,
 };
 
 /**
- * EDIÇÃO DE IMAGEM COM PROMPT (GEMINI 2.5 FLASH IMAGE)
+ * EDIÇÃO DE IMAGEM COM PROMPT (NANO BANANA / 2.5 FLASH IMAGE)
  */
 export const editImageWithAI = async (base64Image: string, prompt: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -92,7 +94,7 @@ export const editImageWithAI = async (base64Image: string, prompt: string): Prom
     contents: {
       parts: [
         { inlineData: { mimeType, data: pureData } },
-        { text: `Edite esta imagem seguindo este comando: ${prompt}. Mantenha a fidelidade da joia, remova distrações e use um estilo de fotografia de luxo.` }
+        { text: `Edite a imagem conforme o prompt: ${prompt}. Estilo fotografia de joias de luxo, foco nítido, realce de brilho e reflexos.` }
       ]
     }
   });
@@ -102,7 +104,7 @@ export const editImageWithAI = async (base64Image: string, prompt: string): Prom
       if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
     }
   }
-  throw new Error("Não foi possível editar a imagem com I.A.");
+  throw new Error("Não foi possível editar com I.A.");
 };
 
 /**
@@ -112,7 +114,7 @@ export const generateImagePro = async (prompt: string, size: ImageSize = '1K'): 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-image-preview',
-    contents: { parts: [{ text: `Fotografia profissional de joia de luxo: ${prompt}. Iluminação de estúdio, macro, 8k, foco nítido.` }] },
+    contents: { parts: [{ text: `High-end luxury jewelry product photography: ${prompt}. Professional lighting, macro lens, 8k resolution, extreme detail.` }] },
     config: {
       imageConfig: { aspectRatio: "1:1", imageSize: size }
     }
@@ -134,11 +136,12 @@ export const animateWithVeo = async (base64Image: string, prompt: string, ratio:
   const pureData = cleanBase64(base64Image);
   const mimeType = getMimeType(base64Image);
 
+  // Garantir que ratio seja compatível (Veo 3.1 exige 16:9 ou 9:16)
   const finalRatio = (ratio === '16:9' || ratio === '9:16') ? ratio : '9:16';
 
   let operation = await ai.models.generateVideos({
     model: 'veo-3.1-fast-generate-preview',
-    prompt: `${prompt}. Cinematic slow motion, glints and sparkles, premium luxury feel.`,
+    prompt: `${prompt}. Luxury slow-motion cinematic showcase, glints, reflections, 4k detail.`,
     image: { imageBytes: pureData, mimeType },
     config: { numberOfVideos: 1, resolution: '720p', aspectRatio: finalRatio }
   });
@@ -154,6 +157,9 @@ export const animateWithVeo = async (base64Image: string, prompt: string, ratio:
   return URL.createObjectURL(blob);
 };
 
+/**
+ * RETOQUE PADRÃO (REMOVE FUNDO)
+ */
 export const enhanceJewelryImage = async (base64Image: string, observation?: string): Promise<EnhancedJewelryResponse> => {
   const meta = await analyzeJewelryFast(base64Image);
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -165,7 +171,7 @@ export const enhanceJewelryImage = async (base64Image: string, observation?: str
     contents: {
       parts: [
         { inlineData: { mimeType, data: pureData } },
-        { text: `Faça o retoque desta joia (${meta.category} de ${meta.material}). ${observation || ''}. Remova o fundo, coloque fundo branco puro #FFFFFF e realce o brilho.` }
+        { text: `Retoque esta joia (${meta.category} de ${meta.material}). ${observation || ''}. Remova o fundo, aplique branco puro #FFFFFF, realce o brilho dos metais e pedras.` }
       ]
     }
   });

@@ -61,12 +61,12 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCapture })
               }
             }
           } catch (e) {
-            console.error(e);
+            console.error("Erro no play do vídeo:", e);
           }
         };
       }
     } catch (err) {
-      console.error(err);
+      console.error("Erro ao iniciar câmera:", err);
       alert("Erro ao acessar câmera traseira.");
       onClose();
     }
@@ -94,11 +94,17 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCapture })
   }, [isOpen, startCamera, stopCamera]);
 
   const capturePhoto = () => {
-    if (!videoRef.current || !canvasRef.current || !cameraActive) return;
+    // Forçamos a captura mesmo se o status cameraActive ainda não tiver atualizado, 
+    // desde que o videoRef tenha dados.
+    if (!videoRef.current || !canvasRef.current) return;
+    
     const canvas = canvasRef.current;
     const video = videoRef.current;
+    
+    // Sincroniza dimensões
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
+    
     const ctx = canvas.getContext('2d', { alpha: false });
     if (ctx) {
       ctx.imageSmoothingEnabled = true;
@@ -120,36 +126,48 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCapture })
           <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#fdd49e]">Macro Studio</span>
           <span className="text-[7px] text-white/50 uppercase tracking-[0.2em]">Foco Vivara Nítido</span>
         </div>
-        {capabilities?.torch ? (
-          <button 
-            onClick={toggleTorch}
-            className={`p-4 rounded-full border transition-all ${torch ? 'bg-[#fdd49e] text-[#662344]' : 'bg-white/10 border-white/10'}`}
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
-            </svg>
-          </button>
-        ) : <div className="w-14"></div>}
+        <button 
+          onClick={toggleTorch}
+          className={`p-4 rounded-full border transition-all ${torch ? 'bg-[#fdd49e] text-[#662344]' : 'bg-white/10 border-white/10'}`}
+          title="Ligar Lanterna"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
+          </svg>
+        </button>
       </div>
       
-      <video ref={videoRef} autoPlay playsInline muted className="flex-grow object-cover" />
+      <div className="flex-grow flex items-center justify-center overflow-hidden">
+        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+      </div>
 
-      <div className="h-48 bg-black flex flex-col items-center justify-center gap-6">
+      <div className="h-48 bg-black/90 flex flex-col items-center justify-center gap-6 z-30">
         {capabilities?.zoom && (
           <div className="w-64 flex flex-col items-center gap-2">
-            <input type="range" min={capabilities.zoom.min} max={capabilities.zoom.max} step="0.1" value={zoom} onChange={async (e) => {
-              const v = parseFloat(e.target.value);
-              setZoom(v);
-              streamRef.current?.getVideoTracks()[0].applyConstraints({ advanced: [{ zoom: v }] as any });
-            }} className="w-full accent-[#fdd49e]" />
-            <span className="text-[9px] text-[#fdd49e] font-bold uppercase tracking-widest">{zoom.toFixed(1)}x</span>
+            <input 
+              type="range" 
+              min={capabilities.zoom.min} 
+              max={capabilities.zoom.max} 
+              step="0.1" 
+              value={zoom} 
+              onChange={async (e) => {
+                const v = parseFloat(e.target.value);
+                setZoom(v);
+                streamRef.current?.getVideoTracks()[0].applyConstraints({ advanced: [{ zoom: v }] as any });
+              }} 
+              className="w-full accent-[#fdd49e]" 
+            />
+            <span className="text-[9px] text-[#fdd49e] font-bold uppercase tracking-widest">{zoom.toFixed(1)}x ZOOM</span>
           </div>
         )}
+        
+        {/* BOTÃO DE CAPTURA - GARANTIDO VISÍVEL */}
         <button 
           onClick={capturePhoto} 
-          className="w-24 h-24 rounded-full border-[6px] border-white/20 p-2 active:scale-95 transition-all flex items-center justify-center"
+          className="w-24 h-24 rounded-full border-[8px] border-white/10 p-2 active:scale-90 transition-all flex items-center justify-center bg-transparent group"
+          aria-label="Tirar Foto"
         >
-          <div className="w-full h-full rounded-full bg-[#fdd49e] shadow-[0_0_50px_rgba(253,212,158,0.4)]"></div>
+          <div className="w-full h-full rounded-full bg-[#fdd49e] shadow-[0_0_40px_rgba(253,212,158,0.5)] group-hover:scale-105 transition-transform"></div>
         </button>
       </div>
       <canvas ref={canvasRef} className="hidden" />
