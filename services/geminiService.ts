@@ -8,28 +8,29 @@ export interface EnhancedJewelryResponse {
 }
 
 /**
- * Realiza o TRATAMENTO (Retoque) da foto original.
- * Proibido reconstruir ou trocar o objeto por um de banco de dados.
+ * TRATAMENTO DE IMAGEM (PADRÃO VILAÇA)
+ * Foco estritamente no produto isolado. PROIBIDO o uso de modelos nesta etapa.
  */
 export const enhanceJewelryImage = async (base64Image: string, observation?: string): Promise<EnhancedJewelryResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  // Usando Flash 2.5 para edição fiel à imagem de entrada, evitando alucinações de geração
   const model: any = 'gemini-2.5-flash-image'; 
   
   const prompt = `
-    VOCÊ É UM EDITOR DE FOTOGRAFIA PROFISSIONAL (RETOUCHER).
-    TAREFA: TRATAMENTO DE IMAGEM DA JOIA ORIGINAL FORNECIDA.
+    VOCÊ É UM RETOCADOR TÉCNICO DE JOALHERIA DE ELITE. 
+    ESTILO DE REFERÊNCIA OBRIGATÓRIO: VILAÇA (Padronização Fotográfica de Luxo).
 
-    REGRAS INVIOLÁVEIS:
-    1. NÃO RECONSTRUA A JOIA. NÃO USE IMAGENS DE BANCO DE DADOS.
-    2. PRESERVE 100% A GEOMETRIA, AS IMPERFEIÇÕES NATURAIS E A FORMA DO OBJETO ORIGINAL.
-    3. REMOÇÃO DE FUNDO: Isole o objeto perfeitamente. O fundo deve ser #FFFFFF (BRANCO ABSOLUTO).
-    4. MELHORIA DE PIXELS: Apenas limpe o ruído, ajuste nitidez e melhore os realces de luz (highlights) do metal original.
-    5. SOMBRA TÉCNICA: Mantenha apenas uma sombra de contato sutil para realismo no fundo branco.
+    DIRETRIZES ESTÉTICAS VILAÇA:
+    1. FUNDO: Branco Absoluto (#FFFFFF). Imagem puramente isolada.
+    2. ZERO MODELOS: Não inclua pessoas, mãos ou qualquer elemento humano nesta foto. Apenas a joia.
+    3. ILUMINAÇÃO: Metal com brilho especular nítido, cores neutras e realistas.
+    4. NITIDEZ: Máxima em gemas e detalhes do metal para mostrar a originalidade técnica.
+    5. RECORTE: Perfeito com sombra de contato (contact shadow) sutil e difusa para realismo.
+    6. ENQUADRAMENTO: Amplie a joia para ocupar 85-90% do quadro (Close-up).
+    7. FIDELIDADE ABSOLUTA: Não reconstrua a joia. Apenas trate a luz, limpe impurezas do fundo e melhore o contraste da foto original. Mantenha a originalidade da peça.
+    
+    PEDIDO ADICIONAL: ${observation || 'Tratamento padrão Vilaça de alta fidelidade.'}
 
-    OBSERVAÇÃO DO CLIENTE VILAÇA: ${observation || 'Tratamento padrão de luxo.'}
-
-    RETORNE APENAS A IMAGEM TRATADA E O METADADO: [META: CATEGORIA, MATERIAL]
+    RETORNE O METADADO: [META: CATEGORIA, MATERIAL]
   `;
 
   try {
@@ -40,6 +41,9 @@ export const enhanceJewelryImage = async (base64Image: string, observation?: str
           { inlineData: { mimeType: 'image/png', data: base64Image.split(',')[1] || base64Image } },
           { text: prompt }
         ]
+      },
+      config: {
+        imageConfig: { aspectRatio: "1:1" }
       }
     });
 
@@ -61,29 +65,31 @@ export const enhanceJewelryImage = async (base64Image: string, observation?: str
       }
     }
 
-    if (!imageUrl) throw new Error("Falha no tratamento da imagem.");
+    if (!imageUrl) throw new Error("Falha no processamento.");
     return { imageUrl, category, material };
   } catch (error: any) {
-    console.error("Erro no Tratamento:", error);
+    console.error("Erro no Tratamento Vilaça:", error);
     throw error;
   }
 };
 
 /**
- * Gera a visualização na modelo usando a I.A. apenas para ambientação e proporção.
+ * AMBIENTAÇÃO COM MODELO I.A. (FOCO EM CLOSE-UP / MACRO)
  */
 export const generateModelView = async (base64Jewelry: string, category: string, material: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const modelName = 'gemini-3-pro-image-preview'; 
 
   const prompt = `
-    VILAÇA ESTÚDIO - AMBIENTAÇÃO EDITORIAL.
-    USE A JOIA DA IMAGEM EM ANEXO. 
-    REGRAS DE PROPORÇÃO:
-    1. A joia deve ser colocada em uma modelo I.A. respeitando a escala real (ex: um anel deve caber no dedo, um colar no pescoço).
-    2. USE SEU CONHECIMENTO DE PROPORÇÃO HUMANA APENAS PARA MEDIR E ESCALAR A JOIA CORRETAMENTE.
-    3. A modelo deve ser luxuosa, pele impecável, fundo de estúdio.
-    4. A JOIA DEVE SER IDENTICA À ANEXADA.
+    VILAÇA ESTÚDIO - FOTOGRAFIA MACRO EDITORIAL.
+    OBJETIVO: Mostrar a joia em uma modelo real (I.A.).
+    
+    DIRETRIZES DE ENQUADRAMENTO:
+    1. FOCO ÚNICO: Mostre APENAS a parte do corpo onde a joia é usada (ex: apenas a mão para anéis, apenas a orelha para brincos, apenas o pescoço/colo para colares).
+    2. CLOSE-UP: A imagem deve ser um "close-up" extremo para valorizar o produto na pele.
+    3. ESCALA: A joia deve estar em proporção anatômica perfeita.
+    4. ESTILO VILAÇA: Pele perfeita, iluminação de estúdio luxuosa, fundo neutro elegante.
+    5. FIDELIDADE: A joia deve ser IDÊNTICA à imagem anexada.
   `;
 
   try {
@@ -94,6 +100,9 @@ export const generateModelView = async (base64Jewelry: string, category: string,
           { inlineData: { mimeType: 'image/png', data: base64Jewelry.split(',')[1] || base64Jewelry } },
           { text: prompt }
         ]
+      },
+      config: {
+        imageConfig: { aspectRatio: "4:5" }
       }
     });
 
@@ -102,9 +111,9 @@ export const generateModelView = async (base64Jewelry: string, category: string,
         if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
       }
     }
-    throw new Error("Erro na ambientação.");
+    throw new Error("Erro ao gerar visualização.");
   } catch (error: any) {
-    console.error("Erro ao gerar modelo:", error);
+    console.error("Erro na Modelo:", error);
     throw error;
   }
 };

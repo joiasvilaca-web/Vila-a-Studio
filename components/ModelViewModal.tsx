@@ -24,16 +24,8 @@ const ModelViewModal: React.FC<ModelViewModalProps> = ({ isOpen, onClose, modelI
         </button>
       </div>
 
-      <div className="relative max-w-md w-full aspect-[4/5] bg-zinc-900 rounded-[2rem] overflow-hidden shadow-2xl border border-white/5">
-        <img src={modelImageUrl} className="w-full h-full object-cover" alt="Visualização IA" />
-        
-        <div className="absolute bottom-0 inset-x-0 p-8 bg-gradient-to-t from-black/95 via-black/60 to-transparent">
-          <div className="text-center">
-            <p className="text-[9px] text-white/80 font-bold uppercase tracking-[0.1em] leading-relaxed">
-              IMAGEM GERADA POR I.A. PODE CONTER DISTORÇÕES,<br/> SEMPRE FALE COM UMA ATENDENTE.
-            </p>
-          </div>
-        </div>
+      <div className="relative max-w-2xl w-full h-auto max-h-[90vh] bg-zinc-900 rounded-[2rem] overflow-hidden shadow-2xl border border-white/5 flex items-center justify-center">
+        <img src={modelImageUrl} className="max-w-full max-h-full object-contain" alt="Visualização Full Screen" />
       </div>
     </div>
   );
