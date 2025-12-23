@@ -6,7 +6,46 @@ export interface EnhancedJewelryResponse {
   imageUrl: string;
   category: string;
   material: string;
+  gender: string;
 }
+
+/**
+ * Redimensiona a imagem para otimizar o processamento e evitar erros de memória em celulares.
+ */
+const resizeImage = (base64Str: string, maxWidth = 1024, maxHeight = 1024): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > maxWidth) {
+          height *= maxWidth / width;
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width *= maxHeight / height;
+          height = maxHeight;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d', { alpha: false });
+      if (ctx) {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+      }
+      resolve(canvas.toDataURL('image/jpeg', 0.8));
+    };
+    img.onerror = () => resolve(base64Str);
+  });
+};
 
 const cleanBase64 = (base64: string): string => {
   if (base64.includes(",")) return base64.split(",")[1];
@@ -15,59 +54,64 @@ const cleanBase64 = (base64: string): string => {
 
 const getMimeType = (base64: string): string => {
   const match = base64.match(/^data:(image\/[a-zA-Z]+);base64,/);
-  return match ? match[1] : 'image/png';
+  return match ? match[1] : 'image/jpeg';
 };
 
 /**
- * ANÁLISE RÁPIDA (FLASH LITE)
+ * ANÁLISE RÁPIDA (GEMINI 3 FLASH)
+ * Identifica categoria, material e gênero do público-alvo.
  */
-export const analyzeJewelryFast = async (base64Image: string): Promise<{category: string, material: string}> => {
+export const analyzeJewelryFast = async (base64Image: string): Promise<{category: string, material: string, gender: string}> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const pureData = cleanBase64(base64Image);
   const mimeType = getMimeType(base64Image);
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-lite-latest',
+    model: 'gemini-3-flash-preview',
     contents: {
       parts: [
         { inlineData: { mimeType, data: pureData } },
-        { text: "Identifique a CATEGORIA (ANEL, BRINCO, COLO, PULSEIRA) e MATERIAL (OURO AMARELO, OURO BRANCO, PRATA, OURO ROSE) desta joia." }
+        { text: "Analise esta joia e identifique: 1. CATEGORIA (ANEL, BRINCO, COLAR, PULSEIRA); 2. MATERIAL (OURO, PRATA, ROSE); 3. GÊNERO ALVO (MASCULINO, FEMININO, UNISSEX). Retorne apenas um JSON com as chaves 'category', 'material' e 'gender'." }
       ]
     },
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          category: { type: Type.STRING },
-          material: { type: Type.STRING },
-        },
-        required: ["category", "material"]
-      }
-    }
+    config: { responseMimeType: "application/json" }
   });
 
-  return JSON.parse(response.text || '{"category":"JOIA","material":"METAL"}');
+  try {
+    const result = JSON.parse(response.text?.replace(/```json/g, "").replace(/```/g, "").trim() || '{}');
+    return {
+      category: result.category || "JOIA",
+      material: result.material || "METAL",
+      gender: result.gender || "UNISSEX"
+    };
+  } catch (e) {
+    return { category: "JOIA", material: "METAL", gender: "UNISSEX" };
+  }
 };
 
 /**
- * GERAÇÃO EDITORIAL (GEMINI 3 PRO IMAGE)
+ * GERAÇÃO EDITORIAL (GEMINI 2.5 FLASH IMAGE)
+ * Usa o gênero identificado para escolher o modelo apropriado.
  */
-export const generateModelView = async (base64Jewelry: string, category: string, material: string): Promise<string> => {
+export const generateModelView = async (base64Jewelry: string, category: string, material: string, gender: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const pureData = cleanBase64(base64Jewelry);
-  const mimeType = getMimeType(base64Jewelry);
+  const resized = await resizeImage(base64Jewelry, 1024, 1024);
+  const pureData = cleanBase64(resized);
+  const mimeType = getMimeType(resized);
+
+  const modelDescription = gender.toUpperCase() === 'MASCULINO' 
+    ? 'a handsome male model' 
+    : gender.toUpperCase() === 'FEMININO' 
+      ? 'a beautiful female model' 
+      : 'a stylish model';
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-image-preview',
+    model: 'gemini-2.5-flash-image',
     contents: {
       parts: [
         { inlineData: { mimeType, data: pureData } },
-        { text: `A high-end professional fashion editorial photo of a model wearing this ${category} made of ${material}. Luxury magazine aesthetic, sharp focus on the jewelry, soft studio lighting.` }
+        { text: `Create a professional luxury fashion editorial photo of ${modelDescription} elegantly wearing this ${category} made of ${material}. High-end jewelry campaign style, soft lighting, elegant lifestyle background, close-up on the jewelry.` }
       ]
-    },
-    config: {
-      imageConfig: { aspectRatio: "1:1", imageSize: "1K" }
     }
   });
 
@@ -77,29 +121,30 @@ export const generateModelView = async (base64Jewelry: string, category: string,
       if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
     }
   }
-  throw new Error("Falha ao gerar visual editorial.");
+  throw new Error("Editorial failed.");
 };
 
 /**
- * TRATAMENTO E RECORTE (GEMINI 2.5 FLASH IMAGE)
+ * TRATAMENTO (GEMINI 2.5 FLASH IMAGE)
  */
 export const enhanceJewelryImage = async (base64Image: string): Promise<EnhancedJewelryResponse> => {
   const meta = await analyzeJewelryFast(base64Image);
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const pureData = cleanBase64(base64Image);
-  const mimeType = getMimeType(base64Image);
+  const resized = await resizeImage(base64Image, 1024, 1024);
+  const pureData = cleanBase64(resized);
+  const mimeType = getMimeType(resized);
 
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash-image',
     contents: {
       parts: [
         { inlineData: { mimeType, data: pureData } },
-        { text: `Remove original background completely. Set a solid pure white background #FFFFFF. Enhance the jewelry's natural sparkle, sharpen the edges, and polish the ${meta.material} material. Professional product photography style.` }
+        { text: `Remove original background. Set a solid pure white background (#FFFFFF). Polish the ${meta.material} to look shiny and clean, removing any shadows. Professional catalog style.` }
       ]
     }
   });
 
-  let treatedUrl = base64Image;
+  let treatedUrl = resized;
   const parts = response.candidates?.[0]?.content?.parts;
   if (parts) {
     for (const part of parts) {
@@ -113,17 +158,11 @@ export const enhanceJewelryImage = async (base64Image: string): Promise<Enhanced
   return { imageUrl: treatedUrl, ...meta };
 };
 
-/**
- * GERAÇÃO PRO (GEMINI 3 PRO IMAGE)
- */
-export const generateImagePro = async (prompt: string, size: ImageSize = '1K'): Promise<string> => {
+export const generateImagePro = async (prompt: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-image-preview',
-    contents: { parts: [{ text: `Masterpiece luxury jewelry photography, ultra-detailed: ${prompt}. Solid white background, high-end studio lighting, 8k resolution.` }] },
-    config: {
-      imageConfig: { aspectRatio: "1:1", imageSize: size }
-    }
+    model: 'gemini-2.5-flash-image',
+    contents: { parts: [{ text: `Masterpiece jewelry product photography: ${prompt}. Solid white background, luxury studio lighting.` }] }
   });
 
   const parts = response.candidates?.[0]?.content?.parts;
@@ -132,23 +171,21 @@ export const generateImagePro = async (prompt: string, size: ImageSize = '1K'): 
       if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
     }
   }
-  throw new Error("Erro na geração da imagem Pro.");
+  throw new Error("Generation failed.");
 };
 
-/**
- * EDIÇÃO POR PROMPT (GEMINI 2.5 FLASH IMAGE)
- */
 export const editImageWithAI = async (base64Image: string, prompt: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const pureData = cleanBase64(base64Image);
-  const mimeType = getMimeType(base64Image);
+  const resized = await resizeImage(base64Image, 1024, 1024);
+  const pureData = cleanBase64(resized);
+  const mimeType = getMimeType(resized);
 
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash-image',
     contents: {
       parts: [
         { inlineData: { mimeType, data: pureData } },
-        { text: `Modify this jewelry based on: ${prompt}. Keep professional quality.` }
+        { text: `Modify the jewelry based on: ${prompt}. Maintain the professional white background.` }
       ]
     }
   });
@@ -159,5 +196,6 @@ export const editImageWithAI = async (base64Image: string, prompt: string): Prom
       if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
     }
   }
-  throw new Error("Erro na edição assistida.");
+  throw new Error("Edit failed.");
 };
+
