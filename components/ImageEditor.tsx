@@ -13,7 +13,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
     contrast: 100,
     saturate: 100,
     warmth: 0,
-    mirror: 10
+    mirror: 12 // Padrão Vivara para reflexo suave
   });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -60,18 +60,17 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
     mainCanvas.width = bCanvas.width = w;
     mainCanvas.height = bCanvas.height = totalHeight;
 
-    // 1. FUNDO BLINDADO: Preenchemos o canvas principal com Branco Puro imutável
+    // 1. BASE WHITE
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, w, totalHeight);
 
-    // 2. BUFFER DE AJUSTE: Aplicamos os filtros de brilho/contraste no buffer temporário
+    // 2. TREATMENT BUFFER
     bCtx.clearRect(0, 0, w, totalHeight);
     bCtx.filter = `brightness(${filters.brightness}%) contrast(${filters.contrast}%) saturate(${filters.saturate}%) sepia(${filters.warmth}%)`;
     bCtx.drawImage(img, 0, 0, w, h);
     bCtx.filter = 'none';
 
-    // 3. TRANSFERÊNCIA SELETIVA (MÁSCARA CIRÚRGICA)
-    // Analisamos o original para saber exatamente onde está o objeto (pixels não-brancos)
+    // 3. MASKING (REMOVING HALOS/CONTOUR SHADOWS)
     const sourceData = sCtx.getImageData(0, 0, w, h);
     const filterData = bCtx.getImageData(0, 0, w, h);
     const finalData = ctx.getImageData(0, 0, w, h);
@@ -80,7 +79,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
     const fPixels = filterData.data;
     const outPixels = finalData.data;
 
-    // Um pixel é considerado fundo se for muito próximo do branco puro
+    // Strict threshold for white background to ensure no contour glow
     const bgThreshold = 250; 
 
     for (let i = 0; i < sPixels.length; i += 4) {
@@ -88,31 +87,28 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
       const g = sPixels[i+1];
       const b = sPixels[i+2];
 
-      // Se o pixel original NÃO for fundo branco, ele é objeto e recebe o ajuste
+      // If the original pixel is not pure white, it's part of the jewelry
       if (r < bgThreshold || g < bgThreshold || b < bgThreshold) {
         outPixels[i] = fPixels[i];
         outPixels[i+1] = fPixels[i+1];
         outPixels[i+2] = fPixels[i+2];
         outPixels[i+3] = 255;
       } else {
-        // Se for fundo, mantemos o branco puro preenchido no passo 1
-        // Não alteramos outPixels[i...i+3] pois o fillRect já cuidou disso
+        outPixels[i+3] = 0; // Transparent for the background area in the buffer
       }
     }
     ctx.putImageData(finalData, 0, 0);
 
-    // 4. REFLEXO DE ESTÚDIO (Opcional)
+    // 4. MIRROR REFLECTION (BELOW OBJECT ONLY)
     if (filters.mirror > 0) {
       ctx.save();
       const mirrorH = h * (filters.mirror / 100);
       ctx.translate(0, h * 2);
       ctx.scale(1, -1);
-      ctx.globalAlpha = 0.08; 
+      ctx.globalAlpha = 0.10; 
       
-      // Desenha o objeto já filtrado no reflexo, respeitando a máscara
       ctx.drawImage(bCanvas, 0, h, w, h);
       
-      // Fade-out do reflexo
       ctx.globalCompositeOperation = 'destination-out';
       const grad = ctx.createLinearGradient(0, h, 0, h + mirrorH);
       grad.addColorStop(0, 'rgba(255, 255, 255, 0)');
@@ -124,7 +120,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
   };
 
   useEffect(() => {
-    const timer = setTimeout(applyFilters, 40);
+    const timer = setTimeout(applyFilters, 50);
     return () => clearTimeout(timer);
   }, [filters]);
 
@@ -141,29 +137,29 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
         
-        <div className="bg-white p-1 rounded-2xl shadow-[0_60px_120px_rgba(0,0,0,0.9)] max-w-full">
-          <canvas ref={canvasRef} className="max-w-full max-h-[75vh] object-contain rounded-xl" />
+        <div className="bg-white p-0 rounded-xl shadow-2xl overflow-hidden max-w-full">
+          <canvas ref={canvasRef} className="max-w-full max-h-[75vh] object-contain" />
         </div>
       </div>
 
       <div className="w-full md:w-96 bg-[#080808] border-l border-white/5 p-10 flex flex-col shadow-2xl">
         <div className="mb-12 text-center">
-          <h3 className="text-[#fdd49e] font-serif text-3xl uppercase tracking-tighter italic">Photo Treatment</h3>
-          <p className="text-[10px] text-white/30 uppercase tracking-[0.4em] font-black mt-3">Fidelidade Vilaça Joias</p>
+          <h3 className="text-[#fdd49e] font-serif text-3xl uppercase tracking-tighter italic">Vivara Studio 4x5</h3>
+          <p className="text-[10px] text-white/30 uppercase tracking-[0.4em] font-black mt-3">Tratamento de Catálogo</p>
         </div>
         
         <div className="space-y-12 flex-grow">
           <div className="space-y-5">
             <div className="flex justify-between items-end">
-               <label className="text-[11px] uppercase tracking-widest text-white/40 font-bold">Luz do Objeto</label>
+               <label className="text-[11px] uppercase tracking-widest text-white/40 font-bold">Brilho do Metal</label>
                <span className="text-[10px] text-[#fdd49e] font-mono">{filters.brightness}%</span>
             </div>
-            <input type="range" min="60" max="160" value={filters.brightness} onChange={e => setFilters(f => ({...f, brightness: +e.target.value}))} className="w-full accent-[#fdd49e]" />
+            <input type="range" min="60" max="150" value={filters.brightness} onChange={e => setFilters(f => ({...f, brightness: +e.target.value}))} className="w-full accent-[#fdd49e]" />
           </div>
           
           <div className="space-y-5">
             <div className="flex justify-between items-end">
-               <label className="text-[11px] uppercase tracking-widest text-white/40 font-bold">Definição Metal</label>
+               <label className="text-[11px] uppercase tracking-widest text-white/40 font-bold">Contraste HDR</label>
                <span className="text-[10px] text-[#fdd49e] font-mono">{filters.contrast}%</span>
             </div>
             <input type="range" min="80" max="140" value={filters.contrast} onChange={e => setFilters(f => ({...f, contrast: +e.target.value}))} className="w-full accent-[#fdd49e]" />
@@ -171,7 +167,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
 
           <div className="space-y-5">
             <div className="flex justify-between items-end">
-               <label className="text-[11px] uppercase tracking-widest text-white/40 font-bold">Reflexo de Base</label>
+               <label className="text-[11px] uppercase tracking-widest text-white/40 font-bold">Intensidade do Reflexo</label>
                <span className="text-[10px] text-[#fdd49e] font-mono">{filters.mirror}%</span>
             </div>
             <input type="range" min="0" max="30" value={filters.mirror} onChange={e => setFilters(f => ({...f, mirror: +e.target.value}))} className="w-full accent-[#fdd49e]" />
@@ -179,8 +175,8 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
         </div>
         
         <div className="pt-10 border-t border-white/5">
-           <button onClick={handleSave} className="w-full bg-[#fdd49e] text-[#662344] py-6 font-black uppercase tracking-[0.2em] rounded-2xl hover:brightness-110 transition-all shadow-xl active:scale-95 mb-4">Finalizar Tratamento</button>
-           <p className="text-[9px] text-white/20 text-center uppercase tracking-widest leading-relaxed">Nota: O fundo branco (#FFFFFF) permanece inalterado para preservação do catálogo.</p>
+           <button onClick={handleSave} className="w-full bg-[#fdd49e] text-[#662344] py-6 font-black uppercase tracking-[0.2em] rounded-2xl hover:brightness-110 transition-all shadow-xl active:scale-95 mb-4">Salvar Tratamento</button>
+           <p className="text-[9px] text-white/20 text-center uppercase tracking-widest leading-relaxed px-4">Recorte macro 4x5 com fundo branco puro e remoção de sombras externas.</p>
         </div>
       </div>
       
