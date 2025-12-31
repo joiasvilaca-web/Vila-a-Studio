@@ -2,6 +2,7 @@
   "name": "VILAÇA ESTÚDIO",
   "description": "Estúdio profissional de fotografia de joias com I.A. de última geração padrão Vivara.",
   "requestFramePermissions": [
-    "camera"
+    "camera",
+    "display-capture"
   ]
 }
