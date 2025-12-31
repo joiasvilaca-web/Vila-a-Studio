@@ -18,6 +18,7 @@ const CameraModal: React.FC<CameraModalProps> = ({
   const streamRef = useRef<MediaStream | null>(null);
   const [zoom, setZoom] = useState(1);
   const [torch, setTorch] = useState(false);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
   const [capabilities, setCapabilities] = useState<any>(null);
 
   const stopCamera = useCallback(() => {
@@ -33,7 +34,7 @@ const CameraModal: React.FC<CameraModalProps> = ({
     try {
       const constraints: any = {
         video: {
-          facingMode: { ideal: "environment" },
+          facingMode: { ideal: facingMode },
           width: { ideal: 3840 },
           height: { ideal: 2160 },
           frameRate: { ideal: 60 },
@@ -60,7 +61,9 @@ const CameraModal: React.FC<CameraModalProps> = ({
     } catch (err) {
       console.error("Erro na Câmera:", err);
       try {
-        const fallback = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        const fallback = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: facingMode } 
+        });
         streamRef.current = fallback;
         if (videoRef.current) {
           videoRef.current.srcObject = fallback;
@@ -70,7 +73,7 @@ const CameraModal: React.FC<CameraModalProps> = ({
         onClose();
       }
     }
-  }, [onClose, stopCamera]);
+  }, [onClose, stopCamera, facingMode]);
 
   useEffect(() => {
     if (isOpen) {
@@ -90,6 +93,10 @@ const CameraModal: React.FC<CameraModalProps> = ({
         console.warn("Falha no flash", e);
       }
     }
+  };
+
+  const toggleCamera = () => {
+    setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
   };
 
   const updateZoom = async (val: number) => {
@@ -115,6 +122,11 @@ const CameraModal: React.FC<CameraModalProps> = ({
     if (ctx) {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
+      // Inverter horizontalmente se estiver usando a câmera frontal para parecer um espelho
+      if (facingMode === 'user') {
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+      }
       ctx.drawImage(video, 0, 0);
       onCapture(canvas.toDataURL('image/jpeg', 0.95));
     }
@@ -133,19 +145,32 @@ const CameraModal: React.FC<CameraModalProps> = ({
           <span className="text-[10px] font-black uppercase tracking-[0.5em] text-[#fdd49e] drop-shadow-md">VILAÇA HDR STUDIO</span>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-[8px] text-white/70 uppercase tracking-widest font-black">
-              MODO RAW 4K ATIVO
+              {facingMode === 'environment' ? 'MODO RAW 4K ATIVO' : 'MODO SELFIE ATIVO'}
             </span>
           </div>
         </div>
 
-        <button 
-          onClick={toggleTorch}
-          className={`p-4 rounded-full border transition-all shadow-lg ${torch ? 'bg-[#fdd49e] text-[#662344] border-[#fdd49e]' : 'bg-white/10 text-white border-white/20'}`}
-        >
-          <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M7,2V5H10V22H14V5H17V2H7M9,4H15V5H9V4M12,20V11H12V20M12,9V7H12V9Z" />
-          </svg>
-        </button>
+        <div className="flex gap-4">
+          <button 
+            onClick={toggleCamera}
+            className="p-4 bg-white/10 backdrop-blur-xl rounded-full text-white border border-white/20 hover:bg-white/20 transition-all shadow-lg"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+
+          {capabilities?.torch && facingMode === 'environment' && (
+            <button 
+              onClick={toggleTorch}
+              className={`p-4 rounded-full border transition-all shadow-lg ${torch ? 'bg-[#fdd49e] text-[#662344] border-[#fdd49e]' : 'bg-white/10 text-white border-white/20'}`}
+            >
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M7,2V5H10V22H14V5H17V2H7M9,4H15V5H9V4M12,20V11H12V20M12,9V7H12V9Z" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex-grow bg-[#050505] flex items-center justify-center relative overflow-hidden">
@@ -154,30 +179,32 @@ const CameraModal: React.FC<CameraModalProps> = ({
           autoPlay 
           playsInline 
           muted 
-          className="min-w-full min-h-full object-cover" 
+          className={`min-w-full min-h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`} 
         />
         
-        <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col items-center gap-6 bg-black/40 backdrop-blur-2xl p-5 rounded-full border border-white/10 shadow-2xl">
-          <button onClick={() => updateZoom(zoom + 0.5)} className="text-white/80 hover:text-[#fdd49e] transition-colors p-2 rounded-full hover:bg-white/10">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" strokeWidth={2.5}/></svg>
-          </button>
-          <div className="h-40 flex flex-col items-center justify-center relative">
-             <input 
-              type="range"
-              min={capabilities?.zoom?.min || 1}
-              max={capabilities?.zoom?.max || 10}
-              step="0.1"
-              value={zoom}
-              onChange={(e) => updateZoom(parseFloat(e.target.value))}
-              className="h-32 w-1 accent-[#fdd49e] cursor-pointer"
-              style={{ writingMode: 'bt-lr', appearance: 'slider-vertical' } as any}
-            />
+        {facingMode === 'environment' && (
+          <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col items-center gap-6 bg-black/40 backdrop-blur-2xl p-5 rounded-full border border-white/10 shadow-2xl">
+            <button onClick={() => updateZoom(zoom + 0.5)} className="text-white/80 hover:text-[#fdd49e] transition-colors p-2 rounded-full hover:bg-white/10">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" strokeWidth={2.5}/></svg>
+            </button>
+            <div className="h-40 flex flex-col items-center justify-center relative">
+               <input 
+                type="range"
+                min={capabilities?.zoom?.min || 1}
+                max={capabilities?.zoom?.max || 10}
+                step="0.1"
+                value={zoom}
+                onChange={(e) => updateZoom(parseFloat(e.target.value))}
+                className="h-32 w-1 accent-[#fdd49e] cursor-pointer"
+                style={{ writingMode: 'bt-lr', appearance: 'slider-vertical' } as any}
+              />
+            </div>
+            <button onClick={() => updateZoom(zoom - 0.5)} className="text-white/80 hover:text-[#fdd49e] transition-colors p-2 rounded-full hover:bg-white/10">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M20 12H4" strokeWidth={2.5}/></svg>
+            </button>
+            <span className="text-[10px] font-black text-[#fdd49e] font-mono mt-2">{zoom.toFixed(1)}x</span>
           </div>
-          <button onClick={() => updateZoom(zoom - 0.5)} className="text-white/80 hover:text-[#fdd49e] transition-colors p-2 rounded-full hover:bg-white/10">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M20 12H4" strokeWidth={2.5}/></svg>
-          </button>
-          <span className="text-[10px] font-black text-[#fdd49e] font-mono mt-2">{zoom.toFixed(1)}x</span>
-        </div>
+        )}
 
         <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
           <div className={`w-[85vw] h-[85vw] max-w-[400px] max-h-[400px] border-[0.5px] rounded-full border-[#fdd49e]/20 transition-all duration-1000`}>
@@ -196,7 +223,7 @@ const CameraModal: React.FC<CameraModalProps> = ({
         
         <div className="flex flex-col items-center gap-2">
           <p className="text-[10px] text-white/40 uppercase tracking-[0.4em] font-black">
-            ENQUADRE A JOIA NO CENTRO
+            {facingMode === 'environment' ? 'ENQUADRE A JOIA NO CENTRO' : 'POSICIONE O ROSTO NO CÍRCULO'}
           </p>
           <div className="flex gap-4">
             <span className="text-[8px] text-[#fdd49e]/40 font-bold uppercase tracking-widest">RES: 4K UHD</span>
