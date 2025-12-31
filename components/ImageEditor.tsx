@@ -13,7 +13,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
     contrast: 100,
     saturate: 100,
     warmth: 0,
-    mirror: 12 // Padrão Vivara para reflexo suave
+    mirror: 12 // Padrão Vilaça para reflexo suave
   });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -144,7 +144,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageUrl, onSave, onCancel })
 
       <div className="w-full md:w-96 bg-[#080808] border-l border-white/5 p-10 flex flex-col shadow-2xl">
         <div className="mb-12 text-center">
-          <h3 className="text-[#fdd49e] font-serif text-3xl uppercase tracking-tighter italic">Vivara Studio 4x5</h3>
+          <h3 className="text-[#fdd49e] font-serif text-3xl uppercase tracking-tighter italic">Vilaça Studio 4x5</h3>
           <p className="text-[10px] text-white/30 uppercase tracking-[0.4em] font-black mt-3">Tratamento de Catálogo</p>
         </div>
         

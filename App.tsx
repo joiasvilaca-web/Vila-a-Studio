@@ -5,7 +5,7 @@ import CameraModal from './components/CameraModal';
 import ImageEditor from './components/ImageEditor';
 import { 
   enhanceJewelryImage, 
-  generateImagePro, 
+  generateImagePro,
   generateModelView
 } from './services/geminiService';
 import { ProcessingState } from './types';
@@ -14,8 +14,10 @@ interface AppImageState {
   original: string;
   treated?: string;
   edited?: string;
-  model?: string;
+  category?: string;
+  material?: string;
   gender?: string;
+  model?: string;
 }
 
 const App: React.FC = () => {
@@ -25,6 +27,7 @@ const App: React.FC = () => {
   const [cameraTarget, setCameraTarget] = useState<'capture' | 'design'>('capture');
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [processing, setProcessing] = useState<ProcessingState>({ status: 'idle' });
+  const [isGeneratingModel, setIsGeneratingModel] = useState(false);
   const [proPrompt, setProPrompt] = useState('');
   const [designReferences, setDesignReferences] = useState<string[]>([]);
   
@@ -32,17 +35,7 @@ const App: React.FC = () => {
 
   const openCapture = (target: 'capture' | 'design') => {
     setCameraTarget(target);
-    const aistudio = (window as any).aistudio;
-    if (typeof aistudio?.hasSelectedApiKey === 'function') {
-      aistudio.hasSelectedApiKey().then((hasKey: boolean) => {
-        if (!hasKey && typeof aistudio.openSelectKey === 'function') {
-          aistudio.openSelectKey();
-        }
-        setIsCameraOpen(true);
-      });
-    } else {
-      setIsCameraOpen(true);
-    }
+    setIsCameraOpen(true);
   };
 
   const handleFileSelect = (target: 'capture' | 'design') => {
@@ -77,7 +70,7 @@ const App: React.FC = () => {
       return;
     }
 
-    setProcessing({ status: 'loading', message: 'Executando Recorte, Zoom Macro e Tratamento Vivara...' });
+    setProcessing({ status: 'loading', message: 'Executando Recorte e Tratamento Vilaça...' });
     
     try {
       const result = await enhanceJewelryImage(base64);
@@ -85,25 +78,55 @@ const App: React.FC = () => {
         original: base64, 
         treated: result.imageUrl, 
         edited: result.imageUrl,
+        category: result.category,
+        material: result.material,
         gender: result.gender
       });
       setProcessing({ status: 'success' });
-
-      try {
-        const modelUrl = await generateModelView(result.imageUrl, result.category, result.material, result.gender);
-        setImage(p => p ? { ...p, model: modelUrl } : null);
-      } catch (err) {
-        console.warn("Editorial generation failed.");
-      }
     } catch (e: any) {
       console.error(e);
       setProcessing({ status: 'error', message: "Falha no tratamento da imagem." });
     }
   };
 
+  const handleGenerateModel = async () => {
+    if (!image?.edited || !image.category || isGeneratingModel) return;
+
+    // Verificar se existe chave de API para o modelo Pro
+    const aistudio = (window as any).aistudio;
+    if (typeof aistudio?.hasSelectedApiKey === 'function') {
+      const hasKey = await aistudio.hasSelectedApiKey();
+      if (!hasKey && typeof aistudio.openSelectKey === 'function') {
+        await aistudio.openSelectKey();
+        // Seguindo as instruções: após o diálogo, prosseguimos assumindo sucesso.
+      }
+    }
+    
+    setIsGeneratingModel(true);
+    try {
+      const modelUrl = await generateModelView(
+        image.edited, 
+        image.category, 
+        image.material || 'gold', 
+        image.gender || 'female'
+      );
+      setImage(prev => prev ? { ...prev, model: modelUrl } : null);
+      
+      // Scroll automático para a nova imagem da modelo
+      setTimeout(() => {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      }, 500);
+    } catch (err) {
+      console.error("Editorial generation failed:", err);
+      alert("Houve um problema ao gerar a modelo. Tente novamente.");
+    } finally {
+      setIsGeneratingModel(false);
+    }
+  };
+
   const handleGenerateDesign = async () => {
     if(!proPrompt && designReferences.length === 0) return;
-    setProcessing({status: 'loading', message: 'Gerando Design Digital Studio 4x5...'});
+    setProcessing({status: 'loading', message: 'Gerando Design Digital Vilaça 3:4...'});
     try {
       const url = await generateImagePro(proPrompt, designReferences);
       setImage({ original: url, edited: url, treated: url });
@@ -240,45 +263,61 @@ const App: React.FC = () => {
           )}
         </div>
       ) : (
-        <div className="animate-in fade-in duration-700 space-y-20 pb-24">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 max-w-[1400px] mx-auto px-6">
-            <div className="space-y-8 animate-in slide-in-from-left duration-700">
-              <div className="flex justify-between items-end px-6">
+        <div className="animate-in fade-in duration-700 space-y-24 pb-32">
+          <div className="max-w-2xl mx-auto px-6 space-y-20">
+            
+            {/* Seção 1: Foto Tratada (Sempre no topo) */}
+            <div className="space-y-8 animate-in slide-in-from-bottom duration-700">
+              <div className="flex justify-between items-end px-4">
                 <div className="flex flex-col">
                   <span className="text-[14px] font-black uppercase tracking-[0.4em] text-[#662344]">FOTO TRATADA</span>
-                  <span className="text-[9px] text-zinc-400 uppercase tracking-widest mt-1">4x5 Macro | Padrão Vivara</span>
+                  <span className="text-[9px] text-zinc-400 uppercase tracking-widest mt-1">3:4 Macro | Padrão Vilaça</span>
                 </div>
                 <div className="flex gap-3">
-                  <button onClick={() => setIsEditorOpen(true)} className="px-7 py-2.5 bg-[#662344] text-[#fdd49e] rounded-full text-[10px] font-black uppercase shadow-lg active:scale-95 transition-all">AJUSTAR ESTÚDIO</button>
+                  <button onClick={() => setIsEditorOpen(true)} className="px-6 py-2 bg-[#662344] text-[#fdd49e] rounded-full text-[9px] font-black uppercase shadow-lg active:scale-95 transition-all">AJUSTAR ESTÚDIO</button>
+                  <button 
+                    onClick={handleGenerateModel} 
+                    disabled={isGeneratingModel}
+                    className={`px-6 py-2 bg-[#fdd49e] text-[#662344] border border-[#662344]/10 rounded-full text-[9px] font-black uppercase shadow-lg active:scale-95 transition-all ${isGeneratingModel ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {image.model ? 'Regerar modelo' : 'Gerar modelo'}
+                  </button>
                 </div>
               </div>
               
-              <div className="aspect-[4/5] bg-white rounded-[2rem] shadow-[0_40px_80px_rgba(0,0,0,0.02)] overflow-hidden border border-zinc-100 flex items-center justify-center p-0 transition-transform hover:scale-[1.01] duration-500">
+              <div className="aspect-[3/4] bg-white rounded-[2rem] shadow-[0_40px_80px_rgba(0,0,0,0.02)] overflow-hidden border border-zinc-100 flex items-center justify-center p-0 transition-transform hover:scale-[1.01] duration-500">
                 <img src={image.edited} className="w-full h-full object-contain" alt="Tratamento Profissional" />
               </div>
             </div>
 
-            <div className="space-y-8 animate-in slide-in-from-right duration-700 delay-200">
-              <div className="flex flex-col px-6">
-                <span className="text-[14px] font-black uppercase tracking-[0.4em] text-[#662344]">CAMPANHA LOOKBOOK</span>
-                <span className="text-[9px] text-zinc-400 uppercase tracking-widest mt-1">Cenário I.A. (Referência Real)</span>
+            {/* Seção 2: Foto Modelo (Aparece abaixo conforme solicitado) */}
+            {(image.model || isGeneratingModel) && (
+              <div className="space-y-8 animate-in slide-in-from-bottom duration-1000 border-t border-zinc-100 pt-16">
+                <div className="flex flex-col px-4">
+                  <span className="text-[14px] font-black uppercase tracking-[0.4em] text-[#662344]">LOOKBOOK EDITORIAL</span>
+                  <span className="text-[9px] text-zinc-400 uppercase tracking-widest mt-1">Geração Gemini 3 Pro | Escala Minimalista</span>
+                </div>
+                <div className="aspect-[3/4] bg-zinc-50 rounded-[2rem] shadow-[0_40px_80px_rgba(0,0,0,0.02)] overflow-hidden border border-zinc-100 flex items-center justify-center relative group">
+                  {image.model ? (
+                    <img src={image.model} className="w-full h-full object-cover transition-all duration-1000 group-hover:scale-105" alt="Lookbook Editorial" />
+                  ) : (
+                    <div className="flex flex-col items-center p-12">
+                      <div className="w-16 h-16 border-[4px] border-[#662344]/5 border-t-[#662344] rounded-full animate-spin mb-10" />
+                      <p className="text-[11px] text-[#662344]/40 font-black uppercase tracking-[0.5em] animate-pulse text-center leading-loose">
+                        Renderizando composição de luxo...<br/>
+                        <span className="text-[8px] opacity-60">Ajustando escala da joia</span>
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="aspect-[4/5] bg-zinc-50 rounded-[2rem] shadow-[0_40px_80px_rgba(0,0,0,0.02)] overflow-hidden border border-zinc-100 flex items-center justify-center relative group">
-                {image.model ? (
-                  <img src={image.model} className="w-full h-full object-cover transition-all duration-1000 group-hover:scale-105" alt="Editorial Luxo" />
-                ) : (
-                  <div className="flex flex-col items-center p-10">
-                    <div className="w-12 h-12 border-[3px] border-[#662344]/5 border-t-[#662344] rounded-full animate-spin mb-8" />
-                    <span className="text-[10px] text-[#662344]/30 font-black uppercase tracking-[0.5em] animate-pulse">Criando Cenário Editorial...</span>
-                  </div>
-                )}
-              </div>
-            </div>
+            )}
+
           </div>
 
-          <div className="flex justify-center pt-10">
+          <div className="flex justify-center">
             <button 
-              onClick={() => { setImage(null); setProcessing({ status: 'idle' }); }}
+              onClick={() => { setImage(null); setProcessing({ status: 'idle' }); setIsGeneratingModel(false); }}
               className="px-24 py-7 bg-white border-2 border-[#662344] text-[#662344] rounded-full text-[12px] font-black uppercase tracking-[0.4em] shadow-xl hover:bg-[#662344] hover:text-[#fdd49e] transition-all duration-500 active:scale-95"
             >
               INICIAR NOVO PROJETO

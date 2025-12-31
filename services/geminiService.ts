@@ -9,13 +9,15 @@ export interface EnhancedJewelryResponse {
   gender: string;
 }
 
-const resizeImage = (base64Str: string, maxWidth = 1024, maxHeight = 1280): Promise<string> => {
+/**
+ * Redimensiona e enquadra a imagem para o padrão 3:4.
+ */
+const resizeImage = (base64Str: string, maxWidth = 1024, maxHeight = 1365): Promise<string> => {
   return new Promise((resolve) => {
     const img = new Image();
     img.src = base64Str;
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      // Proporção 4:5 vertical rigorosa (Instagram Portrait Standard)
       canvas.width = maxWidth;
       canvas.height = maxHeight;
       
@@ -24,14 +26,12 @@ const resizeImage = (base64Str: string, maxWidth = 1024, maxHeight = 1280): Prom
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, maxWidth, maxHeight);
         
-        // Objeto ampliado para ocupar ~92% da área (Zoom Macro de Catálogo)
         const width = img.width;
         const height = img.height;
-        const scale = Math.min((maxWidth * 0.92) / width, (maxHeight * 0.85) / height);
+        const scale = Math.min((maxWidth * 0.90) / width, (maxHeight * 0.80) / height);
         
         const x = (maxWidth - width * scale) / 2;
-        // Posicionado levemente acima do eixo central para dar espaço ao reflexo/sombra na base
-        const y = (maxHeight - height * scale) / 2.8;
+        const y = (maxHeight - height * scale) / 3.0;
         
         ctx.drawImage(img, x, y, width * scale, height * scale);
       }
@@ -60,7 +60,7 @@ export const analyzeJewelryFast = async (base64Image: string): Promise<{category
     contents: {
       parts: [
         { inlineData: { mimeType, data: pureData } },
-        { text: "Identify CATEGORY, MATERIAL, and GENDER of this jewelry. Return ONLY JSON." }
+        { text: "Analyze this jewelry image. Return ONLY a JSON object with: 1. CATEGORY (ring, necklace, earring, or bracelet), 2. MATERIAL, 3. GENDER ('male' or 'female')." }
       ]
     },
     config: { responseMimeType: "application/json" }
@@ -69,46 +69,64 @@ export const analyzeJewelryFast = async (base64Image: string): Promise<{category
     const text = response.text || '{}';
     return JSON.parse(text.replace(/```json/g, "").replace(/```/g, "").trim());
   } catch (e) {
-    return { category: "JOIA", material: "METAL", gender: "UNISSEX" };
+    return { category: "jewelry", material: "precious metal", gender: "female" };
   }
 };
 
 /**
- * Geração de Cenário Luxo (Apenas para o card de editorial)
+ * GERAÇÃO DE MODELO (LOOKBOOK)
+ * Usa Gemini 3 Pro para garantir que a joia seja aplicada em escala minimalista e realista.
  */
 export const generateModelView = async (base64Jewelry: string, category: string, material: string, gender: string): Promise<string> => {
+  // Criamos uma nova instância para garantir que use a chave de API mais recente do diálogo, se houver.
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const pureData = cleanBase64(base64Jewelry);
   const mimeType = getMimeType(base64Jewelry);
-  const modelDescription = gender.toUpperCase() === 'MASCULINO' ? 'a handsome male model' : 'a beautiful female model';
   
+  const isMale = gender.toLowerCase().includes('male') || gender.toLowerCase().includes('masculino');
+  const modelDescription = isMale ? 'a sophisticated male model' : 'an elegant female model';
+  
+  let placement = "the appropriate body part";
+  const cat = category.toLowerCase();
+  if (cat.includes("ring")) placement = "the ring finger";
+  else if (cat.includes("necklace")) placement = "the neck";
+  else if (cat.includes("earring")) placement = "the earlobe";
+  else if (cat.includes("bracelet")) placement = "the wrist";
+
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-image',
+    model: 'gemini-3-pro-image-preview',
     contents: {
       parts: [
         { inlineData: { mimeType, data: pureData } },
-        { text: `Create a luxury editorial background for this jewelry. 
-                 A ${modelDescription} is wearing it. 
-                 STRICT: Do not change the jewelry shape. Use the photo as reference for the object. 
-                 Setting: High-fashion minimalist studio. 4x5 ratio.` }
+        { text: `Create a high-end luxury editorial lookbook photo.
+                 SUBJECT: ${modelDescription} wearing the EXACT ${category} shown in the reference image.
+                 PLACEMENT: The ${category} must be placed realistically and delicately on ${placement}.
+                 
+                 STRICT SCALE RULE: The jewelry must be MINIMALIST and TINY. It should be scaled down significantly to match real-life human proportions. Do NOT make the jewelry oversized.
+                 
+                 AESTHETIC: High-fashion minimalist studio, soft cinematic lighting, neutral background. 
+                 The jewelry must be perfectly detailed as in the reference, but realistically small.` }
       ]
+    },
+    config: {
+      imageConfig: {
+        aspectRatio: "3:4",
+        imageSize: "1K"
+      }
     }
   });
+  
   const parts = response.candidates?.[0]?.content?.parts || [];
   for (const part of parts) {
     if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
   }
-  throw new Error("Editorial failed.");
+  throw new Error("Editorial generation failed.");
 };
 
-/**
- * TRATAMENTO PADRÃO VIVARA: Recorte, Tratamento HDR, Ampliação e Reflexo de Espelho.
- * Não utiliza recursos generativos para alterar a forma da joia.
- */
 export const enhanceJewelryImage = async (base64Image: string): Promise<EnhancedJewelryResponse> => {
   const meta = await analyzeJewelryFast(base64Image);
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const resized = await resizeImage(base64Image, 1024, 1280);
+  const resized = await resizeImage(base64Image, 1024, 1365);
   const pureData = cleanBase64(resized);
   const mimeType = getMimeType(resized);
   const response = await ai.models.generateContent({
@@ -116,17 +134,16 @@ export const enhanceJewelryImage = async (base64Image: string): Promise<Enhanced
     contents: {
       parts: [
         { inlineData: { mimeType, data: pureData } },
-        { text: `VIVARA BRAND STANDARD TREATMENT - 4x5 PORTRAIT:
-                 1. STRICT NO-GENERATION: Do NOT change the geometry, stones, or details of the jewelry. Keep it 100% original.
-                 2. CLEAN CUT-OUT: Remove all background. Edges must be razor-sharp. 
-                 3. REMOVE CONTOUR SHADOWS: No glow, no shadows, no halos around the jewelry edges.
-                 4. BACKGROUND: Solid Pure White (#FFFFFF).
-                 5. BASE REFLECTION: Add a subtle, professional MIRROR REFLECTION and a tiny soft contact shadow exactly beneath the object (Reflexo e Sombreamento de Base).
-                 6. HDR POLISHING: Enhance natural metal shine and gem brilliance. 
-                 7. MAGNIFY: The jewelry must appear large (Macro style) in the 4x5 frame.` }
+        { text: `VILAÇA BRAND STANDARD: Cut out from background, white background #FFFFFF, sharp focus, enhance brilliance and metal shine. Keep original shape.` }
       ]
+    },
+    config: {
+      imageConfig: {
+        aspectRatio: "3:4"
+      }
     }
   });
+  
   let treatedUrl = resized;
   const parts = response.candidates?.[0]?.content?.parts || [];
   for (const part of parts) {
@@ -140,24 +157,16 @@ export const enhanceJewelryImage = async (base64Image: string): Promise<Enhanced
 
 export const generateImagePro = async (prompt: string, referenceImages: string[] = []): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
-  const parts: any[] = referenceImages.map(img => ({
-    inlineData: {
-      data: cleanBase64(img),
-      mimeType: getMimeType(img)
-    }
+  const parts = referenceImages.map(img => ({
+    inlineData: { data: cleanBase64(img), mimeType: getMimeType(img) }
   }));
-
-  const textPart = { 
-    text: `Luxurious jewelry design generation. 
-           ${referenceImages.length > 0 ? "Use these images as visual style references." : ""}
-           Description: ${prompt || "a luxury masterpiece"}. 
-           Format: 4x5 vertical, pure white background (#FFFFFF), macro view, mirror reflection on base. NO CONTOUR SHADOWS.` 
-  };
 
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash-image',
-    contents: { parts: [...parts, textPart] }
+    contents: { 
+      parts: [...parts, { text: `Luxurious jewelry design: ${prompt}. Minimalist, white background, 3:4.` }] 
+    },
+    config: { imageConfig: { aspectRatio: "3:4" } }
   });
 
   const contentParts = response.candidates?.[0]?.content?.parts || [];
@@ -165,25 +174,4 @@ export const generateImagePro = async (prompt: string, referenceImages: string[]
     if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
   }
   throw new Error("Generation failed.");
-};
-
-export const editImageWithAI = async (base64Image: string, prompt: string): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const resized = await resizeImage(base64Image, 1024, 1280);
-  const pureData = cleanBase64(resized);
-  const mimeType = getMimeType(resized);
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-image',
-    contents: {
-      parts: [
-        { inlineData: { mimeType, data: pureData } },
-        { text: `Refine this jewelry: ${prompt}. Maintain VIVARA standard: 4x5, large scale, pure white background, mirror reflection below. ABSOLUTELY NO CONTOUR SHADOWS.` }
-      ]
-    }
-  });
-  const parts = response.candidates?.[0]?.content?.parts || [];
-  for (const part of parts) {
-    if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-  }
-  throw new Error("Edit failed.");
 };
