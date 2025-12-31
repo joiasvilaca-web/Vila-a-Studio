@@ -21,7 +21,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       <footer className="py-12 text-center bg-white border-t border-[#fdd49e]/10">
         <p className="text-[10px] text-[#662344]/40 uppercase tracking-[0.25em] font-bold">
-          VILAÇA STUDIO - TRATAMENTO DIGITAL DE ALTA JOALHERIA
+          VILAÇA JOALHERIA & OURIVESARIA - TRATAMENTO DIGITAL DE ALTA DEFINIÇÃO
         </p>
       </footer>
     </div>
