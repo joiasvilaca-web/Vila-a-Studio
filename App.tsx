@@ -7,6 +7,7 @@ import {
   enhanceJewelryImage, 
   generateModelView,
   createComparisonImage,
+  createInstagramStyleComposite,
   generateStoryAndHashtags,
   JewelryStoryResponse
 } from './services/geminiService';
@@ -23,6 +24,7 @@ interface AppImageState {
   gender?: string;
   model?: string;
   composite?: string;
+  instaComposite?: string;
   storyData?: JewelryStoryResponse;
 }
 
@@ -46,28 +48,31 @@ const App: React.FC = () => {
 
   const processImageInput = async (base64: string) => {
     setIsCameraOpen(false);
-    setProcessing({ status: 'loading', message: 'Identificando e Tratando Peça...' });
+    setProcessing({ status: 'loading', message: 'Iniciando Processamento de Luxo...' });
     try {
       const treatmentResult = await enhanceJewelryImage(base64);
+      
+      setProcessing({ status: 'loading', message: 'Gerando Lookbook e Editorial...' });
+      const modelResult = await generateModelView(treatmentResult.cleanUrl, treatmentResult.category, treatmentResult.material, treatmentResult.gender);
+      
+      setProcessing({ status: 'loading', message: 'Criando Composições de Campanha...' });
+      const compositeUrl = await createComparisonImage(treatmentResult.cleanUrl, modelResult.cleanUrl);
+      const instaUrl = await createInstagramStyleComposite(treatmentResult.cleanUrl, modelResult.cleanUrl);
+
+      const storyData = await generateStoryAndHashtags(treatmentResult.category, treatmentResult.material);
+
       setImage({ 
         original: base64, 
         treated: treatmentResult.imageUrl, 
         cleanTreated: treatmentResult.cleanUrl,
         category: treatmentResult.category,
         material: treatmentResult.material,
-        gender: treatmentResult.gender
+        gender: treatmentResult.gender,
+        model: modelResult.imageUrl, 
+        composite: compositeUrl,
+        instaComposite: instaUrl,
+        storyData 
       });
-
-      setProcessing({ status: 'loading', message: 'Gerando Lookbook Minimalista...' });
-      const modelResult = await generateModelView(treatmentResult.cleanUrl, treatmentResult.category, treatmentResult.material, treatmentResult.gender);
-      
-      setProcessing({ status: 'loading', message: 'Criando Moodboard Vilaça...' });
-      const compositeUrl = await createComparisonImage(treatmentResult.cleanUrl, modelResult.cleanUrl);
-
-      setProcessing({ status: 'loading', message: 'Buscando Tendências & Hashtags...' });
-      const storyData = await generateStoryAndHashtags(treatmentResult.category, treatmentResult.material);
-
-      setImage(prev => prev ? { ...prev, model: modelResult.imageUrl, composite: compositeUrl, storyData } : null);
       setProcessing({ status: 'success' });
     } catch (e) {
       setProcessing({ status: 'error', message: "Erro no Estúdio Vilaça." });
@@ -157,8 +162,8 @@ const App: React.FC = () => {
   return (
     <Layout>
       <div className="flex justify-between items-center mb-10">
-        <button onClick={() => setView('landing')} className="text-[10px] font-black text-[#662344] uppercase tracking-widest">Voltar</button>
-        <span className="text-[10px] font-black text-[#662344]/30 uppercase tracking-[0.5em]">Studio Pro</span>
+        <button onClick={() => setView('landing')} className="text-[10px] font-black text-[#662344] uppercase tracking-widest">Sair do Studio</button>
+        <span className="text-[10px] font-black text-[#662344]/30 uppercase tracking-[0.5em]">Studio Vilaça Pro v2.0</span>
       </div>
 
       <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={e => {
@@ -172,61 +177,84 @@ const App: React.FC = () => {
       
       {processing.status === 'loading' ? (
         <div className="min-h-[60vh] flex flex-col items-center justify-center">
-          <div className="w-20 h-20 border-t-4 border-[#662344] rounded-full animate-spin mb-8" />
-          <p className="text-[#662344] font-serif italic text-xl animate-pulse">{processing.message}</p>
+          <div className="w-16 h-16 border-t-2 border-[#662344] rounded-full animate-spin mb-8" />
+          <p className="text-[#662344] font-serif italic text-lg animate-pulse">{processing.message}</p>
         </div>
       ) : !image ? (
         <div className="max-w-4xl mx-auto text-center py-20">
-          <h1 className="text-8xl font-serif text-[#662344] italic mb-4">Vilaça</h1>
-          <p className="text-[10px] tracking-[0.6em] text-[#662344]/50 font-black mb-16 uppercase">Joalheria & Ourivesaria Digital</p>
-          <div className="flex flex-col md:flex-row gap-8 justify-center">
-            <button onClick={() => setIsCameraOpen(true)} className="px-12 py-8 bg-white border rounded-[2rem] shadow-xl hover:scale-105 transition-all text-[#662344] font-black uppercase tracking-widest text-[10px]">Câmera Studio</button>
-            <button onClick={() => fileInputRef.current?.click()} className="px-12 py-8 bg-white border rounded-[2rem] shadow-xl hover:scale-105 transition-all text-[#662344] font-black uppercase tracking-widest text-[10px]">Abrir Arquivo</button>
+          <h1 className="text-7xl font-serif text-[#662344] italic mb-4">Studio Vilaça</h1>
+          <p className="text-[9px] tracking-[0.5em] text-[#662344]/40 font-black mb-16 uppercase">Produção Profissional de Assets</p>
+          <div className="flex flex-col md:flex-row gap-6 justify-center">
+            <button onClick={() => setIsCameraOpen(true)} className="px-10 py-6 bg-white border rounded-[1.5rem] shadow-xl hover:scale-105 transition-all text-[#662344] font-black uppercase tracking-widest text-[9px]">Capturar Produto</button>
+            <button onClick={() => fileInputRef.current?.click()} className="px-10 py-6 bg-[#662344] text-[#fdd49e] rounded-[1.5rem] shadow-xl hover:scale-105 transition-all font-black uppercase tracking-widest text-[9px]">Enviar Foto</button>
           </div>
         </div>
       ) : (
-        <div className="max-w-4xl mx-auto space-y-20 pb-32">
-          {image.composite && (
+        <div className="max-w-5xl mx-auto space-y-16 pb-32 animate-in fade-in duration-1000">
+          {/* Header minimalista com metadados */}
+          <div className="flex flex-col items-center gap-4 border-b border-zinc-100 pb-10">
+            <span className="text-[9px] font-black tracking-[0.5em] text-[#662344]/30 uppercase">Assets Gerados com Sucesso</span>
+            <div className="flex gap-4">
+              <div className="px-6 py-2 bg-[#662344]/5 text-[#662344] rounded-full text-[8px] font-black uppercase tracking-widest border border-[#662344]/10">{image.category}</div>
+              <div className="px-6 py-2 bg-[#662344]/5 text-[#662344] rounded-full text-[8px] font-black uppercase tracking-widest border border-[#662344]/10">{image.material}</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
             <div className="space-y-6">
-              <div className="flex flex-col items-center gap-3">
-                <span className="text-[10px] font-black tracking-[0.4em] text-[#662344] uppercase">Campanha Vilaça</span>
-                <div className="flex gap-4">
-                  <div className="px-4 py-1.5 bg-[#662344] text-[#fdd49e] rounded-full text-[8px] font-black uppercase tracking-widest">{image.category}</div>
-                  <div className="px-4 py-1.5 bg-[#fdd49e] text-[#662344] rounded-full text-[8px] font-black uppercase tracking-widest">{image.material}</div>
-                </div>
+              <h3 className="text-sm font-black text-[#662344] uppercase tracking-widest">Tratamento Packshot</h3>
+              <div className="bg-white p-4 rounded-[2rem] shadow-xl border border-zinc-100">
+                <img src={image.treated} className="w-full h-auto rounded-[1.5rem]" alt="Treated" />
               </div>
-              <div className="bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border">
-                <img src={image.composite} className="w-full h-auto" />
+            </div>
+            <div className="space-y-6">
+              <h3 className="text-sm font-black text-[#662344] uppercase tracking-widest">Editorial IA</h3>
+              <div className="bg-white p-4 rounded-[2rem] shadow-xl border border-zinc-100">
+                <img src={image.model} className="w-full h-auto rounded-[1.5rem]" alt="Model" />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <h3 className="text-sm font-black text-[#662344] uppercase tracking-widest text-center">Composições de Campanha</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <img src={image.composite} className="w-full h-auto rounded-[2rem] shadow-2xl" alt="Composite" />
+              <img src={image.instaComposite} className="w-full h-auto rounded-[2rem] shadow-2xl" alt="Instagram Style" />
+            </div>
+          </div>
+
+          {image.storyData && (
+            <div className="bg-[#662344] p-12 rounded-[3rem] text-[#fdd49e] space-y-8">
+              <div className="text-center">
+                <h3 className="text-3xl font-serif italic mb-2">Narrativa de Luxo</h3>
+                <p className="text-[8px] font-black uppercase tracking-[0.4em] opacity-40">Storytelling para Redes Sociais</p>
+              </div>
+              <p className="text-lg leading-relaxed font-serif italic text-center px-4">"{image.storyData.story}"</p>
+              <div className="flex flex-wrap justify-center gap-3">
+                {image.storyData.hashtags.map((tag, i) => (
+                  <span key={i} className="text-[10px] font-black uppercase tracking-widest opacity-60">#{tag}</span>
+                ))}
               </div>
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-            <div className="space-y-4">
-               <span className="text-[9px] font-black tracking-widest text-[#662344]/40 uppercase ml-4">01. Fotografia Técnica</span>
-               <div className="bg-white rounded-[2rem] shadow-lg p-2 border">
-                 <img src={image.treated} className="w-full h-auto rounded-[1.5rem]" />
-               </div>
-            </div>
-            <div className="space-y-4">
-               <span className="text-[9px] font-black tracking-widest text-[#662344]/40 uppercase ml-4">02. Lookbook Minimalista</span>
-               <div className="bg-zinc-100 rounded-[2rem] shadow-lg overflow-hidden border">
-                 <img src={image.model} className="w-full h-auto" />
-               </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-center gap-6">
-            <button onClick={() => setImage(null)} className="px-16 py-6 bg-[#662344] text-[#fdd49e] rounded-full text-[10px] font-black uppercase tracking-[0.4em] shadow-xl hover:scale-105 active:scale-95 transition-all">Iniciar Novo Processo</button>
-            <p className="text-[8px] text-zinc-400 tracking-widest uppercase text-center leading-relaxed">
-              Sistema Vilaça v6.2 - Alta Ourivesaria Digital<br/>
-              Processamento em 4K HDR via I.A. Geminaris
-            </p>
+          <div className="flex justify-center pt-10">
+            <button 
+              onClick={() => setImage(null)}
+              className="px-12 py-5 bg-white border border-[#662344]/10 text-[#662344] rounded-full font-black uppercase tracking-widest text-[10px] shadow-lg hover:bg-zinc-50"
+            >
+              Processar Nova Joia
+            </button>
           </div>
         </div>
       )}
 
-      <CameraModal isOpen={isCameraOpen} onClose={() => setIsCameraOpen(false)} onCapture={processImageInput} mode="photo" />
+      <CameraModal 
+        isOpen={isCameraOpen} 
+        onClose={() => setIsCameraOpen(false)} 
+        onCapture={processImageInput} 
+        mode="photo" 
+      />
     </Layout>
   );
 };
